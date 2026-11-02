@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiPbMgr.h
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Helper function for AI ProtoBuffer support
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2021 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -58,7 +58,7 @@ void aiPbCmdDisconnect(const reqMsg *req, respMsg *resp, void *param);
 void aiPbTestCmd(const reqMsg *req, respMsg *resp, void *param);
 #define AI_PB_CMD_TEST(par) { EnumCmd_CMD_TEST, &aiPbTestCmd, (par) }
 
-bool aiPbTestModeEnabled();
+bool aiPbTestModeEnabled(void);
 #endif
 
 

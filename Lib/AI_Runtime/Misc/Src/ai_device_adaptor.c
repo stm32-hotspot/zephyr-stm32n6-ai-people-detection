@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ai_device_adaptor.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Specific DEVICE port functions for AI test application
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -162,6 +162,47 @@ void port_hal_set_extra_conf(uint32_t *extra)
 }
 #endif // H7P5 H7p
 
+#if defined(STM32A98)
+#if defined(HAS_EXTRA_CONF) && HAS_EXTRA_CONF >= 4
+void port_hal_set_extra_conf(uint32_t *extra)
+{
+  uint32_t npu_freq_mhz =  HAL_RCC_GetSYSCLKFreq(HAL_RCC_NPU_SYSCLK); /* == MCU freq */
+  uint32_t npur_freq_mhz = HAL_RCC_GetSYSCLKFreq(HAL_RCC_NPU_SYSCLK); /* == MCU freq */
+  
+  /* Add specific infos in relation to the ATONss
+   * Note: NOC freq is returned by port_hal_get_sys_freq()
+   */
+  extra[0] = 0;                  /* extra config
+                                        b7..0  : type/format    00h : N6/ATONss
+                                        b8..31 : TBD
+                                  */
+  extra[1] = npu_freq_mhz;   /* NPU freq. */
+  extra[2] = npur_freq_mhz;    /* NIC freq, AXIMRAM3,4,5,6, NPUCACHE */
+  extra[3] = 0;
+}
+#endif
+#endif
+
+#if defined(SR6X)
+#if defined(HAS_EXTRA_CONF) && HAS_EXTRA_CONF >= 4
+void port_hal_set_extra_conf(uint32_t *extra)
+{
+  uint32_t npu_freq_mhz = port_hal_get_npu_freq();  /* == NPU freq */
+  uint32_t npur_freq_mhz = port_hal_get_cpu_freq(); /* == NIC, RAMs freq */
+
+  /* Add specific infos in relation to the ATONss
+   * Note: NOC freq is returned by port_hal_get_sys_freq()
+   */
+  extra[0] = 0;                  /* extra config
+                                        b7..0  : type/format    00h : N6/ATONss
+                                        b8..31 : TBD
+                                  */
+  extra[1] = npu_freq_mhz;     /* NPU freq. */
+  extra[2] = npur_freq_mhz;    /* NIC, RAMs freq */
+  extra[3] = 0;
+}
+#endif
+#endif
 
 #if !defined(NO_PORT_DWT_INIT_IMP)
 
@@ -173,9 +214,13 @@ void port_hal_set_extra_conf(uint32_t *extra)
 
 void port_dwt_init_imp()
 {
+#if defined(__CORTEX_A) && defined(STM32MP21xxxx)
+	a35_pmu_cycle_count_start(0);
+#else
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   ARM_PMU_Enable();
   ARM_PMU_CNTR_Enable(PMU_CNTENSET_CCNTR_ENABLE_Msk);
+#endif
 }
 
 #endif  /* HAS_PMU_CTRL */

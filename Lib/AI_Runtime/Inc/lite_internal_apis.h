@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2023 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -21,6 +21,88 @@
 
 #include "ai_platform.h"
 #include "ai_lite_interface.h"
+
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+
+/**
+ * @brief Applies the ELU non-linearity to a float16 array.
+ * @param src Input float16 array.
+ * @param dst Output float16 array.
+ * @param in_size Number of elements to process.
+ * @param alpha Pointer to the ELU alpha parameter.
+ */
+LITE_API_ENTRY
+void forward_lite_nl_elu_if16of16(const ai_f16* src, ai_f16* dst,
+                  const ai_size in_size, const ai_f16* alpha);
+
+/**
+ * @brief Applies the ReLU non-linearity to a float16 array.
+ * @param src Input float16 array.
+ * @param dst Output float16 array.
+ * @param in_size Number of elements to process.
+ */
+LITE_API_ENTRY
+void forward_lite_nl_relu_if16of16(const ai_f16* src, ai_f16* dst,
+                   const ai_size in_size);
+
+/**
+ * @brief Applies the hard-sigmoid non-linearity to a float16 array.
+ * @param src Input float16 array.
+ * @param dst Output float16 array.
+ * @param in_size Number of elements to process.
+ * @param alpha Pointer to the hard-sigmoid slope parameter.
+ * @param beta Pointer to the hard-sigmoid offset parameter.
+ */
+LITE_API_ENTRY
+void forward_lite_nl_hard_sigmoid_if16of16(const ai_f16* src, ai_f16* dst,
+                      const ai_size in_size,
+                      const ai_f16* alpha, const ai_f16* beta);
+
+/**
+ * @brief Applies the sigmoid non-linearity to a float16 array.
+ * @param src Input float16 array.
+ * @param dst Output float16 array.
+ * @param in_size Number of elements to process.
+ */
+LITE_API_ENTRY
+void forward_lite_nl_sigmoid_if16of16(const ai_f16* src, ai_f16* dst,
+                    const ai_size in_size);
+
+/**
+ * @brief Applies the hyperbolic tangent non-linearity to a float16 array.
+ * @param src Input float16 array.
+ * @param dst Output float16 array.
+ * @param in_size Number of elements to process.
+ */
+LITE_API_ENTRY
+void forward_lite_nl_tanh_if16of16(const ai_f16* src, ai_f16* dst,
+                   const ai_size in_size);
+
+/**
+ * @brief Clips the values of a float16 array to a specified range.
+ * @param src Input float16 array.
+ * @param dst Output float16 array.
+ * @param in_size Number of elements to process.
+ * @param min Pointer to the minimum output value.
+ * @param max Pointer to the maximum output value.
+ */
+LITE_API_ENTRY
+void forward_lite_nl_clip_if16of16(const ai_f16* src, ai_f16* dst,
+                   const ai_size in_size, const ai_f16* min,
+                   const ai_f16* max);
+
+/**
+ * @brief Applies the generic ReLU operation to a float16 array.
+ * @param src Input float16 array.
+ * @param dst Output float16 array.
+ * @param in_size Number of elements to process.
+ * @param params ReLU parameters: threshold, alpha, and maximum value.
+ */
+LITE_API_ENTRY
+void forward_lite_nl_relu_generic_if16of16_kernel(
+  const ai_f16* src, ai_f16* dst, const ai_i32 in_size, const ai_handle params);
+
+#endif /* AI_FLOAT16_TYPE_SUPPORTED */
 
 /* lite_nl_generic_float */
 #define LITE_NL_ENTRY(nl_id_, nl_name_, nl_op_, nl_op_args_) \

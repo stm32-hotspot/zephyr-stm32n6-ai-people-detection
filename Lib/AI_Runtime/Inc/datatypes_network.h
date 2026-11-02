@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    datatypes_network.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   Definitions of code generated network types
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2017 STMicroelectronics.
+  * Copyright (c) 2017 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

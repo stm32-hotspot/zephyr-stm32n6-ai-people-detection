@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiValidation.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI Validation application - Relocatable network
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2021 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -98,6 +98,10 @@
 
 /* Include the image of the relocatable network */
 #include <network_img_rel.h>
+
+#if !defined(UNUSED)
+#define UNUSED(_p) AI_UNUSED((_p))
+#endif
 
 /* -----------------------------------------------------------------------------
  * TEST-related definitions
@@ -511,9 +515,11 @@ static bool send_ai_io_tensor(const reqMsg *req, respMsg *resp,
 #define PB_LC_PRINT(debug, fmt, ...) LC_PRINT(fmt, ##__VA_ARGS__)
 #else
 
-#define _PRINT_BUFFER_SIZE  80
+#define _PRINT_BUFFER_SIZE  256
 
 static char _print_buffer[_PRINT_BUFFER_SIZE];
+
+void _print_debug(bool debug, const char* fmt, ...);
 
 void _print_debug(bool debug, const char* fmt, ...)
 {
@@ -524,13 +530,14 @@ void _print_debug(bool debug, const char* fmt, ...)
     return;
 
   va_start(ap, fmt);
-  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE, fmt, ap);
+  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE - 1, fmt, ap);
   va_end(ap);
   while (s) {
     if ((_print_buffer[s] == '\n') || (_print_buffer[s] == '\r'))
       _print_buffer[s] = 0;
     s--;
   }
+  _print_buffer[_PRINT_BUFFER_SIZE - 1] = 0;
   aiPbMgrSendLogV2(EnumState_S_WAITING, 1, &_print_buffer[0]);
 }
 
@@ -765,7 +772,7 @@ static int aiBootstrap(struct ai_network_exec_ctx *ctx)
   LC_PRINT("Initializing the network\r\n");
 
   weights_addr = rt_info.weights;
-#if defined(AI_NETWORK_DATA_WEIGHTS_GET_FUNC)
+#if defined(AI_NETWORK_DATA_WEIGHTS_GET_FUNC) && AI_NETWORK_RELOC_WEIGHTS_SIZE > 0
   if (!weights_addr)
     weights_addr = AI_NETWORK_DATA_WEIGHTS_GET_FUNC();
 #endif
@@ -1040,6 +1047,7 @@ void aiPbCmdNNRun(const reqMsg *req, respMsg *resp, void *param)
 
 static aiPbCmdFunc pbCmdFuncTab[] = {
     AI_PB_CMD_SYNC(_CAP),
+    AI_PB_CMD_DISCONNECT(),
     { EnumCmd_CMD_SYS_INFO, &aiPbCmdSysInfo, NULL },
     { EnumCmd_CMD_NETWORK_INFO, &aiPbCmdNNInfo, NULL },
     { EnumCmd_CMD_NETWORK_RUN, &aiPbCmdNNRun, NULL },
@@ -1095,6 +1103,9 @@ int aiValidationProcess(void)
   }
 
   aiPbMgrInit(pbCmdFuncTab);
+
+  /* used only by Stellar MCUs, empty for all other MCUs */
+  port_io_init();
 
   do {
     r = aiPbMgrWaitAndProcess();

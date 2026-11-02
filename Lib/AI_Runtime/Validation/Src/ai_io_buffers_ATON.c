@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ai_io_buffers_ATON.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI Validation application (entry points) - IO buffers allocation
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in

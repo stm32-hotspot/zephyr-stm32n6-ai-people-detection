@@ -33,15 +33,25 @@ struct pb_ostream_s
      * Also, NULL pointer marks a 'sizing stream' that does not
      * write anything.
      */
-    int *callback;
+    const int *callback;
 #else
     bool (*callback)(pb_ostream_t *stream, const pb_byte_t *buf, size_t count);
 #endif
-    void *state;          /* Free field for use by callback implementation. */
-    size_t max_size;      /* Limit number of output bytes written (or use SIZE_MAX). */
-    size_t bytes_written; /* Number of bytes written so far. */
+
+    /* state is a free field for use of the callback function defined above.
+     * Note that when pb_ostream_from_buffer() is used, it reserves this field
+     * for its own use.
+     */
+    void *state;
+
+    /* Limit number of output bytes written. Can be set to SIZE_MAX. */
+    size_t max_size;
+
+    /* Number of bytes written so far. */
+    size_t bytes_written;
     
 #ifndef PB_NO_ERRMSG
+    /* Pointer to constant (ROM) string when decoding function returns error */
     const char *errmsg;
 #endif
 };
@@ -64,22 +74,31 @@ struct pb_ostream_s
  *    stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
  *    pb_encode(&stream, MyMessage_fields, &msg);
  */
-bool pb_encode(pb_ostream_t *stream, const pb_field_t fields[], const void *src_struct);
+bool pb_encode(pb_ostream_t *stream, const pb_msgdesc_t *fields, const void *src_struct);
 
-/* Same as pb_encode, but prepends the length of the message as a varint.
- * Corresponds to writeDelimitedTo() in Google's protobuf API.
+/* Extended version of pb_encode, with several options to control the
+ * encoding process:
+ *
+ * PB_ENCODE_DELIMITED:      Prepend the length of message as a varint.
+ *                           Corresponds to writeDelimitedTo() in Google's
+ *                           protobuf API.
+ *
+ * PB_ENCODE_NULLTERMINATED: Append a null byte to the message for termination.
+ *                           NOTE: This behaviour is not supported in most other
+ *                           protobuf implementations, so PB_ENCODE_DELIMITED
+ *                           is a better option for compatibility.
  */
-bool pb_encode_delimited(pb_ostream_t *stream, const pb_field_t fields[], const void *src_struct);
+#define PB_ENCODE_DELIMITED       0x02U
+#define PB_ENCODE_NULLTERMINATED  0x04U
+bool pb_encode_ex(pb_ostream_t *stream, const pb_msgdesc_t *fields, const void *src_struct, unsigned int flags);
 
-/* Same as pb_encode, but appends a null byte to the message for termination.
- * NOTE: This behaviour is not supported in most other protobuf implementations, so pb_encode_delimited()
- * is a better option for compatibility.
- */
-bool pb_encode_nullterminated(pb_ostream_t *stream, const pb_field_t fields[], const void *src_struct);
+/* Defines for backwards compatibility with code written before nanopb-0.4.0 */
+#define pb_encode_delimited(s,f,d) pb_encode_ex(s,f,d, PB_ENCODE_DELIMITED)
+#define pb_encode_nullterminated(s,f,d) pb_encode_ex(s,f,d, PB_ENCODE_NULLTERMINATED)
 
 /* Encode the message to get the size of the encoded data, but do not store
  * the data. */
-bool pb_get_encoded_size(size_t *size, const pb_field_t fields[], const void *src_struct);
+bool pb_get_encoded_size(size_t *size, const pb_msgdesc_t *fields, const void *src_struct);
 
 /**************************************
  * Functions for manipulating streams *
@@ -121,9 +140,9 @@ bool pb_write(pb_ostream_t *stream, const pb_byte_t *buf, size_t count);
 
 /* Encode field header based on type and field number defined in the field
  * structure. Call this from the callback before writing out field contents. */
-bool pb_encode_tag_for_field(pb_ostream_t *stream, const pb_field_t *field);
+bool pb_encode_tag_for_field(pb_ostream_t *stream, const pb_field_iter_t *field);
 
-/* Encode field header by manually specifing wire type. You need to use this
+/* Encode field header by manually specifying wire type. You need to use this
  * if you want to write out packed arrays from a callback field. */
 bool pb_encode_tag(pb_ostream_t *stream, pb_wire_type_t wiretype, uint32_t field_number);
 
@@ -156,12 +175,18 @@ bool pb_encode_fixed32(pb_ostream_t *stream, const void *value);
 bool pb_encode_fixed64(pb_ostream_t *stream, const void *value);
 #endif
 
+#ifdef PB_CONVERT_DOUBLE_FLOAT
+/* Encode a float value so that it appears like a double in the encoded
+ * message. */
+bool pb_encode_float_as_double(pb_ostream_t *stream, float value);
+#endif
+
 /* Encode a submessage field.
  * You need to pass the pb_field_t array and pointer to struct, just like
  * with pb_encode(). This internally encodes the submessage twice, first to
  * calculate message size and then to actually write it out.
  */
-bool pb_encode_submessage(pb_ostream_t *stream, const pb_field_t fields[], const void *src_struct);
+bool pb_encode_submessage(pb_ostream_t *stream, const pb_msgdesc_t *fields, const void *src_struct);
 
 #ifdef __cplusplus
 } /* extern "C" */

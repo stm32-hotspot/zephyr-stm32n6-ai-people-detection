@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_osal_freertos.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Interface to FreeRTOS as the underlying OS/platform for ATON
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2024-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file

@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiPbMemRWservices.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI Pb services to read/write in memory
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2021 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -21,7 +21,7 @@
 
 /** Computes BSD checksum if a given buffer. Same as 'sum -r' on Unix
  */
-int bsdChecksum(uint8_t* buffer, int length)
+static int bsdChecksum(uint8_t* buffer, int length)
 {
   int i;
   int ch;                       /* Each character read. */
@@ -36,7 +36,7 @@ int bsdChecksum(uint8_t* buffer, int length)
   return checksum;
 }
 
-bool memory_valid_addr_range(uint32_t base_addr, uint32_t size, int mode)
+static bool memory_valid_addr_range(uint32_t base_addr, uint32_t size, int mode)
 {
   (void)base_addr;
   (void)size;
@@ -44,7 +44,7 @@ bool memory_valid_addr_range(uint32_t base_addr, uint32_t size, int mode)
   return true;
 }
 
-void memory_checksum(uintptr_t base_addr, uint32_t size, uint32_t *hash)
+static void memory_checksum(uintptr_t base_addr, uint32_t size, uint32_t *hash)
 {
   if ((size == 0) && hash)
     *hash = ~0UL;
@@ -52,7 +52,7 @@ void memory_checksum(uintptr_t base_addr, uint32_t size, uint32_t *hash)
   *hash = bsdChecksum((uint8_t *)base_addr, size);
 }
 
-bool memory_write(uintptr_t src, uintptr_t dest, uint32_t size, uint32_t *hash)
+static bool memory_write(uintptr_t src, uintptr_t dest, uint32_t size, uint32_t *hash)
 {
   memcpy((void *)dest, (void *)src, size);
   *hash = bsdChecksum((uint8_t *)dest, size);

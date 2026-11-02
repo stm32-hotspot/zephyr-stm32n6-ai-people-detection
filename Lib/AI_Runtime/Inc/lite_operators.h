@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_operators.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   main header file of AI platform lite operators list
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2021 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -26,6 +26,7 @@
 #include "lite_conv2d_dqnn.h"
 #include "lite_conv2d_is16.h"
 #include "lite_convert_dqnn.h"
+#include "lite_convert_float16.h"
 #include "lite_dense_if32.h"
 #include "lite_dense_is1.h"
 #include "lite_dense_is16.h"

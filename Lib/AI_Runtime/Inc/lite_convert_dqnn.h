@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_convert_dqnn.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite convert kernel datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2021 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -157,6 +157,17 @@ void forward_lite_node_convert_iu16of32(
   const ai_u32 size,
   const ai_float in_scale,
   const ai_u16 in_zeropoint);
+  
+
+LITE_API_ENTRY
+void forward_lite_node_convert_is8os16(
+  const ai_i8 *p_in,
+  ai_i16 *p_out,
+  const ai_u32 size,
+  const ai_float scale_ratio,
+  const ai_i8 in_zeropoint,
+  const ai_i16 out_zeropoint);
+
 
 LITE_API_ENTRY
 void forward_lite_node_convert_integer_is8os8(
@@ -227,4 +238,30 @@ void forward_lite_node_convert_is16ou16(
   const ai_i16 in_zp,
   const ai_u16 out_zp);
 
+LITE_API_ENTRY
+void forward_lite_node_convert_is16os16(
+  const ai_i16 *p_in,
+  ai_i16 *p_out,
+  const ai_i32 n_elems,
+  const ai_float scale_ratio,
+  const ai_i16 in_zp,
+  const ai_i16 out_zp);
+
+LITE_API_ENTRY
+void forward_lite_node_convert_iu16os16(
+  const ai_u16 *p_in,
+  ai_i16 *p_out,
+  const ai_i32 n_elems,
+  const ai_float scale_ratio,
+  const ai_u16 in_zp,
+  const ai_i16 out_zp);
+
+LITE_API_ENTRY
+void forward_lite_node_convert_iu16ou16(
+  const ai_u16 *p_in,
+  ai_u16 *p_out,
+  const ai_i32 n_elems,
+  const ai_float scale_ratio,
+  const ai_u16 in_zp,
+  const ai_u16 out_zp);
 #endif    /*LITE_CONVERT_DQNN_H*/

@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_pw.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite pointwise kernel datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2021 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -54,55 +54,113 @@ forward_lite_pw_sssa8_ch(const ai_i8 *pData_in,
                          ai_i16 *pBuffer_a);
 
 void
-forward_lite_pw_hsp_2step_sssa8_ch(const ai_i8 *pData_in,
-                         const ai_u16 width_in,
-                         const ai_u16 height_in,
-                         const ai_u16 filt_stride_x,
-                         const ai_u16 filt_stride_y,
-                         const ai_u16 n_channel_in,
-                         const ai_i8 *pWeights,
-                         const ai_u16 n_channel_out,
-                         const ai_i32 *pBias,
-                         const ai_i8 in_zeropoint,
-                         const ai_i8 out_zeropoint,
-                         const ai_float in_scale,
-                         const ai_float out_scale,
-                         const ai_float *pWt_scale,
-                         ai_i8 *pData_out);
+forward_lite_pw_hsp2_sssa8_ch(const ai_i8 *pData_in,
+                              const ai_u16 width_in,
+                              const ai_u16 height_in,
+                              const ai_u16 filt_stride_x,
+                              const ai_u16 filt_stride_y,
+                              const ai_u16 n_channel_in,
+                              const ai_i8 *pWeights,
+                              const ai_u16 n_channel_out,
+                              const ai_i32 *pBias,
+                              const ai_i8 in_zeropoint,
+                              const ai_i8 out_zeropoint,
+                              const ai_float in_scale,
+                              const ai_float out_scale,
+                              const ai_float *pWt_scale,
+                              ai_i8 *pData_out,
+                              const ai_u16 bram_size);
 
 void 
-forward_lite_pw_hsp_1step_sssa8_ch(const ai_i8 *pData_in,
-                         const ai_u16 width_in,
-                         const ai_u16 height_in,
-                         const ai_u16 filt_stride_x,
-                         const ai_u16 filt_stride_y,
-                         const ai_u16 n_channel_in,
-                         const ai_i8 *pWeights,
-                         const ai_u16 n_channel_out, 
-                         const ai_i32 *pBias,
-                         const ai_i8 in_zeropoint,
-                         const ai_i8 out_zeropoint,
-                         const ai_float in_scale,
-                         const ai_float out_scale,
-                         const ai_float *pWt_scale,
-                         ai_i8 *pData_out);
+forward_lite_pw_hsp1_sssa8_ch(const ai_i8 *pData_in,
+                              const ai_u16 width_in,
+                              const ai_u16 height_in,
+                              const ai_u16 filt_stride_x,
+                              const ai_u16 filt_stride_y,
+                              const ai_u16 n_channel_in,
+                              const ai_i8 *pWeights,
+                              const ai_u16 n_channel_out, 
+                              const ai_i32 *pBias,
+                              const ai_i8 in_zeropoint,
+                              const ai_i8 out_zeropoint,
+                              const ai_float in_scale,
+                              const ai_float out_scale,
+                              const ai_float *pWt_scale,
+                              ai_i8 *pData_out,
+                              const ai_u16 bram_size);
 
 
 void 
-forward_lite_pw_hsp_3step_sssa8_ch(const ai_i8 *pData_in,
-                         const ai_u16 width_in,
-                         const ai_u16 height_in,
-                         const ai_u16 filt_stride_x,
-                         const ai_u16 filt_stride_y,
-                         const ai_u16 n_channel_in,
-                         const ai_i8 *pWeights,
-                         const ai_u16 n_channel_out, 
-                         const ai_i32 *pBias,
-                         const ai_i8 in_zeropoint,
-                         const ai_i8 out_zeropoint,
-                         const ai_float in_scale,
-                         const ai_float out_scale,
-                         const ai_float *pWt_scale,
-                         ai_i8 *pData_out);
+forward_lite_pw_hsp3_sssa8_ch(const ai_i8 *pData_in,
+                              const ai_u16 width_in,
+                              const ai_u16 height_in,
+                              const ai_u16 filt_stride_x,
+                              const ai_u16 filt_stride_y,
+                              const ai_u16 n_channel_in,
+                              const ai_i8 *pWeights,
+                              const ai_u16 n_channel_out, 
+                              const ai_i32 *pBias,
+                              const ai_i8 in_zeropoint,
+                              const ai_i8 out_zeropoint,
+                              const ai_float in_scale,
+                              const ai_float out_scale,
+                              const ai_float *pWt_scale,
+                              ai_i8 *pData_out,
+                              const ai_u16 bram_size);
+
+void
+forward_lite_pw_hsp2D_sssa8_ch(const ai_i8 *pData_in,
+                               const ai_u16 width_in,
+                               const ai_u16 height_in,
+                               const ai_u16 filt_stride_x,
+                               const ai_u16 filt_stride_y,
+                               const ai_u16 n_channel_in,
+                               const ai_i8 *pWeights,
+                               const ai_u16 n_channel_out,
+                               const ai_i32 *pBias,
+                               const ai_i8 in_zeropoint,
+                               const ai_i8 out_zeropoint,
+                               const ai_float in_scale,
+                               const ai_float out_scale,
+                               const ai_float *pWt_scale,
+                               ai_i8 *pData_out,
+                               const ai_u16 bram_size);
+
+void 
+forward_lite_pw_hsp1D_sssa8_ch(const ai_i8 *pData_in,
+                               const ai_u16 width_in,
+                               const ai_u16 height_in,
+                               const ai_u16 filt_stride_x,
+                               const ai_u16 filt_stride_y,
+                               const ai_u16 n_channel_in,
+                               const ai_i8 *pWeights,
+                               const ai_u16 n_channel_out, 
+                               const ai_i32 *pBias,
+                               const ai_i8 in_zeropoint,
+                               const ai_i8 out_zeropoint,
+                               const ai_float in_scale,
+                               const ai_float out_scale,
+                               const ai_float *pWt_scale,
+                               ai_i8 *pData_out,
+                               const ai_u16 bram_size);
+
+
+void 
+forward_lite_pw_hsp3D_sssa8_ch(const ai_i8 *pData_in,
+                               const ai_u16 width_in,
+                               const ai_u16 height_in,
+                               const ai_u16 filt_stride_x,
+                               const ai_u16 filt_stride_y,
+                               const ai_u16 n_channel_in,
+                               const ai_i8 *pWeights,
+                               const ai_u16 n_channel_out, 
+                               const ai_i32 *pBias,
+                               const ai_i8 in_zeropoint,
+                               const ai_i8 out_zeropoint,
+                               const ai_float in_scale,
+                               const ai_float out_scale,
+                               const ai_float *pWt_scale,
+                               ai_i8 *pData_out,
+                               const ai_u16 bram_size);
 
 #endif    /*LITE_PW_H*/

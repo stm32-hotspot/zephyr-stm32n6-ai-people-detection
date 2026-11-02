@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_dbgtrc.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   ATON Debug and Trace unit LL module driver.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2022-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -21,10 +21,29 @@
 #include <stdio.h>
 
 #include "ll_aton.h"
+#include "ll_aton_attributes.h"
 #include "ll_aton_dbgtrc.h"
 #include "ll_aton_util.h"
 
 #if defined(ATON_DEBUG_TRACE_NUM)
+
+/* STM32N6 compatibility layer */
+#if defined(ATON_STM32N6)
+// TODO: this is a workaround to fix the fact that old regparser versions did not generate the DEBUG_TRACE_CTRL register
+// definition for STM32N6. Remove when all regparser versions will be updated
+
+#undef ATON_DEBUG_TRACE_CTRL_DT
+#define ATON_DEBUG_TRACE_CTRL_DT(UNIT) UINT32_C(0x00000000)
+
+#define ATON_DEBUG_TRACE_ILINK_STATES_IDX_MAX(id) 1
+#define ATON_DEBUG_TRACE_OLINK_STATES_IDX_MAX(id) 1
+
+#define ATON_DEBUG_TRACE_ILINK_STATES_GET(unit, idx)                                                                   \
+  (idx == 0 ? ATON_DEBUG_TRACE_LOW_ILINK_STATES_GET(unit) : ATON_DEBUG_TRACE_HIGH_ILINK_STATES_GET(unit))
+#define ATON_DEBUG_TRACE_OLINK_STATES_GET(unit, idx)                                                                   \
+  (idx == 0 ? ATON_DEBUG_TRACE_LOW_OLINK_STATES_GET(unit) : ATON_DEBUG_TRACE_HIGH_OLINK_STATES_GET(unit))
+
+#endif // ATON_STM32N6
 
 /**
  * @brief Initializes the Debug and Trace unit
@@ -35,7 +54,9 @@ int LL_Dbgtrc_Init(int id)
   uint32_t t = ATON_DEBUG_TRACE_CTRL_DT(id);
 
   /* Enable clock and unit */
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_DEBUG_TRACE_CLKB_CLK(id));
+#endif
 
   /* Start tracers, if available */
 #ifdef ATON_DEBUG_TRACE_DEBUG_TRACE_N_TRACERS
@@ -70,7 +91,9 @@ int LL_Dbgtrc_Deinit(int id)
   /* Disable unit and gate its clock */
   ATON_DEBUG_TRACE_CTRL_SET(id, 0);
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_DisableClock(ATON_DEBUG_TRACE_CLKB_CLK(id));
+#endif
 
   return 0;
 }
@@ -78,25 +101,21 @@ int LL_Dbgtrc_Deinit(int id)
 /**
  * @brief Enables Debug and Trace Unit clock via Clock Controller unit
  * @note This is used as method/workaround to start counters synchronously
- * @todo Fix for Puma design
  */
 void LL_Dbgtrc_EnableClock(void)
 {
-  uint32_t t = ATON_CLKCTRL_BGATES_GET(0);
-  t |= (1 << ATON_DEBUG_TRACE_CLKB_CLK(0));
-  ATON_CLKCTRL_BGATES_SET(0, t);
+  unsigned int clock = ATON_CLKCTRL_BGATES_GET(0);
+  LL_ATON_EnableClock(clock);
 }
 
 /**
  * @brief Disables Debug and Trace Unit clock via Clock Controller unit
  * @note This is used as method/workaround to stop counters synchronously
- * @todo Fix for Puma design
  */
 void LL_Dbgtrc_DisableClock(void)
 {
-  uint32_t t = ATON_CLKCTRL_BGATES_GET(0);
-  t &= ~(1 << ATON_DEBUG_TRACE_CLKB_CLK(0));
-  ATON_CLKCTRL_BGATES_SET(0, t);
+  unsigned int clock = ATON_DEBUG_TRACE_CLKB_CLK(0);
+  LL_ATON_DisableClock(clock);
 }
 
 /**
@@ -343,8 +362,8 @@ int LL_Dbgtrc_Counter_StopWatch(int id, LL_Dbgtrc_StopWatch_InitTypdef *StopWatc
   LL_Dbgtrc_Counter_Init(id, StopWatch_InitStruct->stopCounter, &counterConf);
 
   /* Configure main counter, bind start/stop counters to it and start them */
-  counterConf.signal = DBGTRC_VDD;
-  counterConf.evt_type = DBGTRC_EVT_HI;
+  counterConf.signal = ATON_DEBUG_TRACE_0_MON_SIG_VDD;
+  counterConf.evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_HIGH;
   counterConf.wrap = 0;
   counterConf.countdown = 0;
   counterConf.int_disable = 1;
@@ -475,12 +494,13 @@ int LL_Dbgtrc_Tracer_Bind(int id, int streng, uint8_t *stream_addr, size_t n)
   };
 
   /* Connect Debug and Trace Unit to stream engine */
-  const LL_Switch_InitTypeDef switch_init = {LL_Switch_Init_Dest() =
-                                                 __atonn_getDstPortID(STRSWITCH, 0, STRENG, streng, 0),
-                                             LL_Switch_Init_Source(0) = ATONN_SRCPORT(STRSWITCH, 0, DEBUG_TRACE, 0, 0),
-                                             LL_Switch_Init_Context(0) = 1, LL_Switch_Init_Frames(0) = 0};
+  PortType dest_port = {STRSWITCH, 0, STRENG, streng, 0};
+  PortType src_port = {STRSWITCH, 0, DEBUG_TRACE, 0, 0};
+  const LL_Switch_InitTypeDef __ll_switch_init = {LL_Switch_Init_Dest() = LL_getDstPortID(dest_port),
+                                                  LL_Switch_Init_Source(0) = LL_getSrcPortID(src_port),
+                                                  LL_Switch_Init_Context(0) = 1, LL_Switch_Init_Frames(0) = 0};
 
-  LL_Switch_Init(&switch_init, 1);
+  LL_Switch_Init(&__ll_switch_init, 1);
 
   /* Configure and start target stream engine */
   const LL_ATON_EnableUnits_InitTypeDef dma_unit = {{STRENG, streng}};
@@ -503,8 +523,8 @@ int LL_Dbgtrc_Tracer_Bind(int id, int streng, uint8_t *stream_addr, size_t n)
 int LL_Dbgtrc_Count_IRQs(unsigned int counter, unsigned int unitirq)
 {
   LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {
-      .signal = DBGTRC_INTCTRL_SIGNALS + unitirq,
-      .evt_type = DBGTRC_EVT_POSEDGE,
+      .signal = ATON_DEBUG_TRACE_0_MON_SIG_INT_INTCTRL_0_0 + unitirq,
+      .evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_POSITIVE_EDGE,
   };
 
   LL_Dbgtrc_Init(0);
@@ -531,11 +551,11 @@ int LL_Dbgtrc_Count_Epoch_Len(unsigned int counter, unsigned int istreng, unsign
   LL_Dbgtrc_StopWatch_InitTypdef stopwatch_init = {
       .mainCounter = counter,
       .startCounter = counter + 1,
-      .startSignal = DBGTRC_SWITCH_OSTRX_HENV + ATON_STRSWITCH_0_LINK_STRENG_0_0 + istreng,
-      .startEvent = DBGTRC_EVT_POSEDGE,
+      .startSignal = ATON_DEBUG_TRACE_0_MON_SIG_ISTR_STRENG_0_0_VALID + ATON_STRSWITCH_0_LINK_STRENG_0_0 + istreng,
+      .startEvent = ATON_DEBUG_TRACE_EVENT_TYPE_POSITIVE_EDGE,
       .stopCounter = counter + 2,
-      .stopSignal = DBGTRC_INTCTRL_SIGNALS + ATON_STRENG_INT(0) + ostreng,
-      .stopEvent = DBGTRC_EVT_POSEDGE,
+      .stopSignal = ATON_DEBUG_TRACE_0_MON_SIG_INT_INTCTRL_0_0 + ATON_STRENG_INT(0) + ostreng,
+      .stopEvent = ATON_DEBUG_TRACE_EVENT_TYPE_POSITIVE_EDGE,
   };
 
   LL_Dbgtrc_Init(0);
@@ -559,8 +579,9 @@ int LL_Dbgtrc_Count_Epoch_Len(unsigned int counter, unsigned int istreng, unsign
  */
 int LL_Dbgtrc_Count_Stalls(unsigned int counter, unsigned char iostall, unsigned int signal, unsigned int hilow)
 {
-  signal += (iostall ? SWITCH_ISTRX_STALL : SWITCH_OSTRX_STALL);
-  unsigned int event_type = hilow ? DBGTRC_EVT_HI : DBGTRC_EVT_LOW;
+  signal +=
+      (iostall ? ATON_DEBUG_TRACE_0_MON_SIG_OSTR_STRENG_0_0_STALL : ATON_DEBUG_TRACE_0_MON_SIG_ISTR_STRENG_0_0_STALL);
+  unsigned int event_type = hilow ? ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_HIGH : ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_LOW;
 
   LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {
       .signal = signal,
@@ -590,7 +611,7 @@ int LL_Dbgtrc_Count_StrengActive_Config(uint32_t istreng, uint32_t ostreng, unsi
   int ncounters = 0;
   LL_Dbgtrc_Counter_InitTypdef counter_init = {0};
 
-  counter_init.evt_type = DBGTRC_EVT_LOW;
+  counter_init.evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_LOW;
   counter_init.wrap = 0;
   counter_init.countdown = 0;
   counter_init.int_disable = 1;
@@ -600,7 +621,7 @@ int LL_Dbgtrc_Count_StrengActive_Config(uint32_t istreng, uint32_t ostreng, unsi
   {
     if (istreng & (1 << i))
     {
-      counter_init.signal = SWITCH_OSTRX_STALL + 0 + i;
+      counter_init.signal = ATON_DEBUG_TRACE_0_MON_SIG_ISTR_STRENG_0_0_STALL + 0 + i;
       LL_Dbgtrc_Counter_Init(0, counter, &counter_init);
       counter++;
       ncounters++;
@@ -608,7 +629,7 @@ int LL_Dbgtrc_Count_StrengActive_Config(uint32_t istreng, uint32_t ostreng, unsi
 
     if (ostreng & (1 << i))
     {
-      counter_init.signal = SWITCH_ISTRX_STALL + 0 + i;
+      counter_init.signal = ATON_DEBUG_TRACE_0_MON_SIG_OSTR_STRENG_0_0_STALL + 0 + i;
       LL_Dbgtrc_Counter_Init(0, counter, &counter_init);
       counter++;
       ncounters++;
@@ -676,7 +697,10 @@ int LL_Dbgtrc_Count_StrengActive_Print(uint32_t istreng, uint32_t ostreng, unsig
   for (i = 0; i < ATON_STRENG_NUM; i++)
   {
     if ((istreng | ostreng) & (1 << i))
-      LL_ATON_PRINTF("%" PRIu32 "  ", LL_Dbgtrc_Counter_Read(0, counter++));
+    {
+      LL_ATON_PRINTF("%" PRIu32 "  ", LL_Dbgtrc_Counter_Read(0, counter));
+      counter++;
+    }
   }
   LL_ATON_PRINTF("\n");
 
@@ -741,7 +765,7 @@ int LL_Dbgtrc_Count_StrengHENV_Config(uint32_t istreng, unsigned int counter)
   int ncounters = 0;
   LL_Dbgtrc_Counter_InitTypdef counter_init = {0};
 
-  counter_init.evt_type = DBGTRC_EVT_HI;
+  counter_init.evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_HIGH;
   counter_init.wrap = 0;
   counter_init.countdown = 0;
   counter_init.int_disable = 1;
@@ -751,7 +775,7 @@ int LL_Dbgtrc_Count_StrengHENV_Config(uint32_t istreng, unsigned int counter)
   {
     if (istreng & (1 << i))
     {
-      counter_init.signal = DBGTRC_SWITCH_OSTRX_HENV + ATON_STRSWITCH_0_LINK_STRENG_0_0 + i;
+      counter_init.signal = ATON_DEBUG_TRACE_0_MON_SIG_ISTR_STRENG_0_0_VALID + ATON_STRSWITCH_0_LINK_STRENG_0_0 + i;
       LL_Dbgtrc_Counter_Init(0, counter, &counter_init);
       counter++;
       ncounters++;
@@ -789,7 +813,7 @@ int LL_Dbgtrc_Count_StrengHENV_Stop(uint32_t istreng, unsigned int counter)
   for (i = 0; i < ATON_STRENG_NUM; i++)
   {
     if (istreng & (1 << i))
-      LL_Dbgtrc_Counter_Start(0, counter++);
+      LL_Dbgtrc_Counter_Stop(0, counter++);
   }
 
   return 0;
@@ -808,7 +832,10 @@ int LL_Dbgtrc_Count_StrengHENV_Print(uint32_t istreng, unsigned int counter)
   for (i = 0; i < ATON_STRENG_NUM; i++)
   {
     if (istreng & (1 << i))
-      LL_ATON_PRINTF("%" PRIu32 "  ", LL_Dbgtrc_Counter_Read(0, counter++));
+    {
+      LL_ATON_PRINTF("%" PRIu32 "  ", LL_Dbgtrc_Counter_Read(0, counter));
+      counter++;
+    }
   }
   LL_ATON_PRINTF("\n");
 
@@ -832,13 +859,14 @@ int LL_Dbgtrc_Count_StrengHENV_Print(uint32_t istreng, unsigned int counter)
  */
 int LL_Dbgtrc_Count_BurstsLen(unsigned int counter, unsigned char busif, unsigned char readwrite)
 {
-  unsigned int signal = readwrite ? BUS_INTERFACE_READ1X8B : BUS_INTERFACE_WRITE1X8B;
+#if defined(ATON_STM32N6)
+  unsigned int signal = readwrite ? ATON_DEBUG_TRACE_0_MON_SIG_MST_0_ARLEN0 : ATON_DEBUG_TRACE_0_MON_SIG_MST_0_AWLEN0;
   int i;
 
   signal += busif;
 
   LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {
-      .evt_type = DBGTRC_EVT_HI,
+      .evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_HIGH,
   };
 
   LL_Dbgtrc_Init(0);
@@ -849,16 +877,50 @@ int LL_Dbgtrc_Count_BurstsLen(unsigned int counter, unsigned char busif, unsigne
     LL_Dbgtrc_Counter_Init(0, counter + i, &dbgtrc_init);
     LL_Dbgtrc_Counter_Start(0, counter + i);
   }
+#elif defined(ATON_PUMA)
+  int signal = ATON_DEBUG_TRACE_0_MON_SIG_MST_0_ARLEN0 +
+               busif * (ATON_DEBUG_TRACE_0_MON_SIG_MST_1_ARLEN0 - ATON_DEBUG_TRACE_0_MON_SIG_MST_0_ARLEN0);
+
+  if (readwrite == 0)
+    signal += (ATON_DEBUG_TRACE_0_MON_SIG_MST_0_AWLEN0 - ATON_DEBUG_TRACE_0_MON_SIG_MST_0_ARLEN0);
+
+  LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {
+      .evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_HIGH,
+  };
+
+  LL_Dbgtrc_Init(0);
+
+  /* Initialize and start counters */
+  for (int i = 0; i < 7; i++)
+  {
+    dbgtrc_init.signal = signal + i;
+    LL_Dbgtrc_Counter_Init(0, counter, &dbgtrc_init);
+    LL_Dbgtrc_Counter_Start(0, counter);
+    counter++;
+  }
+
+#else
+  /* TODO: add missing implementation for this target (ATON_SR6P3E, ATON_SR6P5E, ATON_STM32A98, ATON_STM32H7P, ...) */
+  LL_ATON_LIB_UNUSED(counter);
+  LL_ATON_LIB_UNUSED(busif);
+  LL_ATON_LIB_UNUSED(readwrite);
+
+#endif
 
   return 0;
 }
 
+#if defined(ATON_STM32N6)
 /**
  * @brief Initialize and start counters to analyze Write and Read accesses on both Bus Interfaces
  * @param counter_id The counter to start from. Uses 16 counters starting from 'counter_id'
+ * @param readwrite Count read or write transactions. Only used on designs where 32 counters are not enough.
+ * @note  readwrite parameter to be deprecated
  */
-int LL_Dbgtrc_BurstLenBenchStart(unsigned int counter_id)
+int LL_Dbgtrc_BurstLenBenchStart(unsigned int counter_id, unsigned int readwrite)
 {
+  LL_ATON_LIB_UNUSED(readwrite);
+
   LL_Dbgtrc_Count_BurstsLen(counter_id, 0, 0);      /* Busif 0 writes */
   LL_Dbgtrc_Count_BurstsLen(counter_id + 4, 0, 1);  /* Busif 0 reads */
   LL_Dbgtrc_Count_BurstsLen(counter_id + 8, 1, 0);  /* Busif 1 writes */
@@ -881,6 +943,50 @@ int LL_Dbgtrc_BurstLenGet(unsigned int counter_id, unsigned int *counters)
 
   return 0;
 }
+#elif defined(ATON_PUMA)
+int LL_Dbgtrc_BurstLenBenchStart(unsigned int counter_id, unsigned int readwrite)
+{
+  LL_ATON_LIB_UNUSED(readwrite);
+  /* Log Read transactions on the four AXI ports */
+  for (int i = 0; i <= 3; i++)
+  {
+    LL_Dbgtrc_Count_BurstsLen(counter_id + 7 * i, i, 1);
+  }
+
+  /* Log Write transactions on the four AXI ports */
+  for (int i = 0; i <= 3; i++)
+  {
+    LL_Dbgtrc_Count_BurstsLen(counter_id + 28 + 7 * i, i, 0);
+  }
+
+  return 0;
+}
+
+int LL_Dbgtrc_BurstLenGet(unsigned int counter_id, unsigned int *counters)
+{
+  int i;
+
+  for (i = 0; i < 56; i++)
+    counters[i] = LL_Dbgtrc_Counter_Read(0, counter_id + i);
+
+  return 0;
+}
+#else
+/* TODO: add missing implementation for this target (ATON_SR6P3E, ATON_SR6P5E, ATON_STM32A98, ATON_STM32H7P, ...) */
+int LL_Dbgtrc_BurstLenBenchStart(unsigned int counter_id, unsigned int readwrite)
+{
+  LL_ATON_LIB_UNUSED(counter_id);
+  LL_ATON_LIB_UNUSED(readwrite);
+  return 0;
+}
+
+int LL_Dbgtrc_BurstLenGet(unsigned int counter_id, unsigned int *counters)
+{
+  LL_ATON_LIB_UNUSED(counter_id);
+  LL_ATON_LIB_UNUSED(counters);
+  return 0;
+}
+#endif
 
 /**
  * @brief Computes the total amount of written and read bytes transited on both Bus Interfaces
@@ -893,7 +999,7 @@ int LL_Dbgtrc_GetTotalTranfers(unsigned int counter_id, unsigned int *totalWrite
 {
   int i;
   *totalWrites = *totalReads = 0;
-  unsigned int counters[16];
+  unsigned int counters[16] = {0};
 
   LL_Dbgtrc_BurstLenGet(counter_id, counters);
 
@@ -925,7 +1031,8 @@ int LL_Dbgtrc_GetTotalTranfers(unsigned int counter_id, unsigned int *totalWrite
  */
 int LL_Dbgtrc_LogTransfers(unsigned int counter_id)
 {
-  unsigned int counters[16];
+#if defined(ATON_STM32N6)
+  unsigned int counters[16] = {0};
   unsigned int totalReads, totalWrites;
 
   LL_Dbgtrc_BurstLenGet(counter_id, counters);
@@ -944,6 +1051,46 @@ int LL_Dbgtrc_LogTransfers(unsigned int counter_id)
 
   LL_ATON_PRINTF("Total Writes: %u bytes\n", totalWrites);
   LL_ATON_PRINTF("Total Reads : %u bytes\n", totalReads);
+#elif defined(ATON_PUMA)
+  /* Counters order for Puma design:
+   * Seven counters for AXI0 reads
+   * Seven counters for AXI0 writes
+   * Seven counters for AXI1 reads
+   * [...]
+   * Seven counters for AXI3 writes
+   */
+  unsigned int counters[56] = {0};
+  LL_Dbgtrc_BurstLenGet(counter_id, counters);
+
+  /* Dump READ stats */
+  LL_ATON_PRINTF("\n");
+  LL_ATON_PRINTF("READ-------------------------------------------------------\n");
+  LL_ATON_PRINTF("BURSTLEN       1      2      4      8      16     32     64\n");
+  LL_ATON_PRINTF("-----------------------------------------------------------\n");
+  for (int i = 0; i < 4; i++)
+  {
+    LL_ATON_PRINTF("BUSIF%i     %6u %6u %6u %6u %6u %6u %6u\n", i, counters[7 * 2 * i + 0], counters[7 * 2 * i + 1],
+                   counters[7 * 2 * i + 2], counters[7 * 2 * i + 3], counters[7 * 2 * i + 4], counters[7 * 2 * i + 5],
+                   counters[7 * 2 * i + 6]);
+  }
+  LL_ATON_PRINTF("-----------------------------------------------------------\n");
+
+  /* Dump WRITE stats */
+  LL_ATON_PRINTF("\n");
+  LL_ATON_PRINTF("WRITE------------------------------------------------------\n");
+  LL_ATON_PRINTF("BURSTLEN       1      2      4      8      16     32     64\n");
+  LL_ATON_PRINTF("-----------------------------------------------------------\n");
+  for (int i = 0; i < 4; i++)
+  {
+    LL_ATON_PRINTF("BUSIF%i     %6u %6u %6u %6u %6u %6u %6u\n", i, counters[7 * (2 * i + 1) + 0],
+                   counters[7 * (2 * i + 1) + 1], counters[7 * (2 * i + 1) + 2], counters[7 * (2 * i + 1) + 3],
+                   counters[7 * (2 * i + 1) + 4], counters[7 * (2 * i + 1) + 5], counters[7 * (2 * i + 1) + 6]);
+  }
+  LL_ATON_PRINTF("-----------------------------------------------------------\n");
+#else
+  /* TODO: add missing implementation for this target (ATON_SR6P3E, ATON_SR6P5E, ATON_STM32A98, ATON_STM32H7P, ...) */
+  LL_ATON_LIB_UNUSED(counter_id);
+#endif
 
   return 0;
 }
@@ -953,10 +1100,14 @@ int LL_Dbgtrc_LogTransfers(unsigned int counter_id)
  * @param counter_id The counter to start from
  * @param counters The counters accumulated by some other means
  * @param first =0 prints header, =1 prints counters values, =2 prints footers
+ * @retval Error code
  */
 int LL_Dbgtrc_LogTransfers_epoch(unsigned int counter_id, unsigned int *counters, int first)
 {
   unsigned int totalReads, totalWrites;
+
+  if (counters == NULL)
+    return LL_ATON_INVALID_PARAM;
 
   if (first == 0)
   {
@@ -990,7 +1141,7 @@ int LL_Dbgtrc_LogTransfers_epoch(unsigned int counter_id, unsigned int *counters
     LL_ATON_PRINTF("Total Reads : %u bytes\n", totalReads);
   }
 
-  return 0;
+  return LL_ATON_OK;
 }
 
 /**
@@ -1004,7 +1155,8 @@ int LL_Dbgtrc_LogTransfers_epoch(unsigned int counter_id, unsigned int *counters
  */
 int LL_Dbgtrc_Count_ExtTrigger(unsigned int counter, unsigned char trigger)
 {
-  LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {.evt_type = DBGTRC_EVT_POSEDGE, .signal = EXT_TRIGGERS_SYNC + trigger};
+  LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {.evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_POSITIVE_EDGE,
+                                              .signal = ATON_DEBUG_TRACE_0_MON_SIG_EXTTRIG_0 + trigger};
 
   LL_Dbgtrc_Init(0);
   LL_Dbgtrc_Counter_Init(0, counter, &dbgtrc_init);
@@ -1020,7 +1172,8 @@ int LL_Dbgtrc_Count_ExtTrigger(unsigned int counter, unsigned char trigger)
 int LL_Dbgtrc_SynchronousCountersTest(void)
 {
   int counter;
-  LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {.evt_type = DBGTRC_EVT_HI, .signal = DBGTRC_VDD};
+  LL_Dbgtrc_Counter_InitTypdef dbgtrc_init = {.evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_HIGH,
+                                              .signal = ATON_DEBUG_TRACE_0_MON_SIG_VDD};
 
   LL_ATON_Init();
   LL_Dbgtrc_Init(0);
@@ -1047,7 +1200,8 @@ int LL_Dbgtrc_SynchronousCountersTest(void)
 
   /* Starts counters and stops them in reverse order. Gates clock to sync counters
    */
-  LL_Dbgtrc_Counter_InitTypdef noevt_init = {.evt_type = DBGTRC_EVT_HI, .signal = DBGTRC_GND};
+  LL_Dbgtrc_Counter_InitTypdef noevt_init = {.evt_type = ATON_DEBUG_TRACE_EVENT_TYPE_LEVEL_HIGH,
+                                             .signal = ATON_DEBUG_TRACE_0_MON_SIG_GND};
 
   /* Starts counter with no event */
   for (counter = 0; counter < 8; counter++)

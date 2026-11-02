@@ -1,12 +1,12 @@
 /**
 ******************************************************************************
 * @file    ai_wrapper_ATON.c
-* @author  GPM/AIS Application Team
+* @author  STMicroelectronics
 * @brief   AI Atonn wrapper
 ******************************************************************************
 * @attention
 *
-* Copyright (c) 2023,2024,2025 STMicroelectronics.
+* Copyright (c) 2023 - 2026 STMicroelectronics.
 * All rights reserved.
 *
 * This software is licensed under terms that can be found in the LICENSE file
@@ -17,7 +17,13 @@
 */
 
 #include "ai_wrapper_ATON.h"
+#if ( defined(STM32N657xx) || defined(STM32N6) )
+/* HAL v1 */
 #include "stm32n6xx_hal.h"
+#elif ( defined(STM32H7P5xx) || defined(STM32H7P) )
+/* HAL v2 */
+#include "stm32_hal.h"
+#endif
 
 #include "ll_aton.h"
 #include "ll_aton_runtime.h"
@@ -33,8 +39,9 @@
 #define BUSIF_LSB_KEY      0xAABBCCDDAABBCCDD
 #define BUSIF_MSB_KEY      0xAABBCCDDAABBCCDD
 
-
+#if ( defined(STM32N657xx) || defined(STM32N6) ) || ( defined(STM32H7P5xx) || defined(STM32H7P) )
 #include "app_config.h"
+#endif
 
 #include "aiTestUtility.h"
 
@@ -158,7 +165,7 @@ static NN_Instance_TypeDef NN_Instance_network[NPU_NETWORK_NUMBER_MAX];
 
 #include "stai.h"
 #include "stai_network.h"
-STAI_NETWORK_CONTEXT_DECLARE(network, STAI_DEFAULT_CONTEXT_SIZE)
+STAI_NETWORK_CONTEXT_DECLARE(network, STAI_NETWORK_CONTEXT_SIZE)
 
 LL_ATON_DECLARE_NAMED_NN_INSTANCE_AND_INTERFACE(network)
 
@@ -242,6 +249,8 @@ static NN_Instance_TypeDef* _get_nn_instance(int idx, struct npu_instance *insta
   return &NN_Instance_network[idx];
 
 #else
+  if (idx >= 1)
+     return NULL;
   return &NN_Instance_network;
 #endif
 }
@@ -590,7 +599,7 @@ __STATIC_INLINE uint32_t _get_cycles_npu_free_counter(uint32_t fmt)
 static void _npu_counters_PRE_START(struct _npu_exec_context *ctx,
                                     const LL_ATON_RT_EpochBlockItem_t *epoch_block)
 {
-
+  uint32_t rw_count = 0;
   /* Set/check the supported config for the counters */
 
   ctx->cur_epoch.counter_fmt = 0;
@@ -641,7 +650,7 @@ static void _npu_counters_PRE_START(struct _npu_exec_context *ctx,
 
   if (ctx->cur_epoch.counter_fmt & COUNTER_FMT_OPT(COUNTER_OPT_BUSIF_RW_DATA))
   {
-    LL_Dbgtrc_BurstLenBenchStart(0);
+    LL_Dbgtrc_BurstLenBenchStart(0, rw_count);
     g_npu_exec_ctx.cur_epoch.counter_fmt |= NPU_MAX_COUNTERS;
   }
 
@@ -760,10 +769,7 @@ static void _rt_callback(
   stai_event_type event_id,
   const void* event_payload)
 {
-  const char* events[] = {"  PRE_START  ", " POST_START  ", "   PRE_END   ", "  POST_END   ", "Post_RT_Init ", "PRE_RT_Deinit"};
-  //stai_ext_network_get_nn_run_status(cb_cookie)
-  
-  if(events[event_id] == events[4]){
+  if (event_id == LL_ATON_RT_Callbacktype_RT_Init) {
     /* Initialize Debug and Trace Unit counter */
     LL_Dbgtrc_EnableClock();
     LL_Dbgtrc_Init(0);
@@ -780,14 +786,12 @@ static void _epoch_callback(
   stai_event_type event_id,
   const void* event_payload)
 {
-  const char* events[] = {"  PRE_START  ", " POST_START  ", "   PRE_END   ", "  POST_END   ", "Post_RT_Init ", "PRE_RT_Deinit"};
   const EpochBlock_ItemTypeDef *epoch_block = (const EpochBlock_ItemTypeDef*)event_payload;
-  //(cb_cookie)->node_io_inspect(epoch_block->epoch_num, epoch_block->epoch_block_num, (LL_ATON_RT_Callbacktype_t)event_id);
   
   const uint32_t ts = port_dwt_get_cycles();
   const uint32_t ts_npu = _get_cycles_npu_free_counter(g_npu_exec_ctx.cur_epoch.counter_fmt);
 
-  if (events[event_id] == events[0])
+  if (event_id == (stai_event_type)LL_ATON_RT_Callbacktype_PRE_START)
   {
     g_npu_exec_ctx.cur_epoch.npu_core = 0;
     g_npu_exec_ctx.cpu_cycles_all += ts;
@@ -805,7 +809,7 @@ static void _epoch_callback(
     _reset_npu_free_counter(g_npu_exec_ctx.cur_epoch.counter_fmt);
   }
 
-  else if (events[event_id] == events[1])
+  else if (event_id == (stai_event_type)LL_ATON_RT_Callbacktype_POST_START)
   {
     g_npu_exec_ctx.cur_epoch.npu_start = ts_npu;
     g_npu_exec_ctx.cpu_cycles_start += ts;
@@ -815,7 +819,7 @@ static void _epoch_callback(
       _npu_counters_POST_START(&g_npu_exec_ctx, epoch_block);
   }
 
-  else if (events[event_id] == events[2])
+  else if (event_id == (stai_event_type)LL_ATON_RT_Callbacktype_PRE_END)
   {
     g_npu_exec_ctx.cur_epoch.npu_core = ts_npu - g_npu_exec_ctx.cur_epoch.npu_start;
     g_npu_exec_ctx.cur_epoch.npu_end = ts_npu;
@@ -828,7 +832,7 @@ static void _epoch_callback(
     g_npu_exec_ctx.cur_epoch.cpu_core = ts;
   }
 
-  else if (events[event_id] == events[3])
+  else if (event_id == (stai_event_type)LL_ATON_RT_Callbacktype_POST_END)
   {
     g_npu_exec_ctx.cur_epoch.npu_end = ts_npu - g_npu_exec_ctx.cur_epoch.npu_end;
     g_npu_exec_ctx.cpu_cycles_end += ts;
@@ -840,8 +844,12 @@ static void _epoch_callback(
     if (g_npu_exec_ctx.user_cb != NULL) {
       g_npu_exec_ctx.user_cb(event_id, g_npu_exec_ctx.exec_epoch_idx - 1, epoch_block, &g_npu_exec_ctx.cur_epoch);
     }
+  }
+  else if ((event_id == (stai_event_type)LL_ATON_RT_Callbacktype_NN_DeInit) || (event_id == (stai_event_type)LL_ATON_RT_Callbacktype_NN_Init))
+  {
+    return;
   };
-
+  
   port_dwt_reset();
 }
 
@@ -875,7 +883,7 @@ static void _prepare_input_buffers(struct npu_instance *instance)
   }
 
 #ifdef USE_NPU_CACHE
-  // npu_cache_invalidate();
+  npu_cache_invalidate();
 #endif
 }
 
@@ -887,7 +895,7 @@ static void _prepare_output_buffers(struct npu_instance *instance)
 static void _force_clean_cache_subsystem(struct npu_instance *instance)
 {
 #ifdef USE_NPU_CACHE
-  // npu_cache_invalidate();
+   npu_cache_invalidate();
 #endif
   mcu_cache_clean_invalidate();
 }
@@ -1141,15 +1149,15 @@ int npu_run(struct npu_instance *instance, struct npu_counters *counters)
   }
 
   /* --   LL_ATON_RT_Main(); -- */
-
+  
+  _prepare_input_buffers(instance);
+  
   uint32_t tick = port_hal_get_tick();
   g_npu_exec_ctx.cpu_cycles_all = 0;
   port_dwt_reset();
-
-  _prepare_input_buffers(instance);
-
+  
   stai_ext_network_new_inference(network);
-
+  
   // Set bus interface keys -- used for encrypted inference only
   LL_Busif_SetKeys ( 0 , 0 , BUSIF_LSB_KEY , BUSIF_MSB_KEY );
   LL_Busif_SetKeys ( 0 , 1 , BUSIF_LSB_KEY , BUSIF_MSB_KEY );
@@ -1170,14 +1178,14 @@ int npu_run(struct npu_instance *instance, struct npu_counters *counters)
           
   } while ((rc != STAI_DONE) && (rc != STAI_SUCCESS));
 
-  _prepare_output_buffers(instance);
-
   g_npu_exec_ctx.cpu_cycles_all += port_dwt_get_cycles();
   tick = port_hal_get_tick() - tick;
-
+  
+  _prepare_output_buffers(instance);
+  
   /* --   LL_ATON_RT_Main(); -- */
   uint32_t x;
-  stai_network_set_callback(network, _epoch_callback, &x);
+  stai_network_set_callback(network, NULL, &x);
 
   g_npu_exec_ctx.user_cb = NULL;
 

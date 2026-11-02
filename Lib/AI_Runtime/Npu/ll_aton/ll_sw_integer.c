@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_sw_integer.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Low Level Software library for Scale-Offset Integer Format inference interfacing with EmbedNets(c)
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2021-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -18,13 +18,12 @@
 
 #include "ll_aton_config.h"
 
-#if LL_ATON_SW_FALLBACK == 1
-
 #include <stdint.h>
 #include <stdio.h>
 
 #include "ll_sw.h"
-#include "ll_sw_integer.h"
+
+#if LL_ATON_SW_FALLBACK == 1
 
 #include "ai_datatypes_internal.h"
 #include "ai_math_helpers.h"
@@ -63,11 +62,87 @@ static int helper_emit_shape_index_axis(int onnx_axis)
   }
 }
 
-/** QLinearMatMul forward function */
-void ll_sw_forward_qlinearmatmul(/* int processor, */ void *sw_info_struct)
+static int helper_emit_gather_shape_index_axis(int onnx_axis, int input_rank)
 {
-  Qlinearmatmul_sw_info *sw_info = (Qlinearmatmul_sw_info *)sw_info_struct;
+  if (input_rank == 0)
+    return helper_emit_shape_index_axis(onnx_axis);
 
+  if (input_rank < 1 || input_rank > 4)
+  {
+#ifdef LL_SW_ENABLE_ASSERTS
+    LL_ATON_ASSERT(0 && "Gather input rank not supported");
+#endif
+    return -1;
+  }
+
+  if (onnx_axis < 0)
+    onnx_axis += input_rank;
+
+  if (onnx_axis < 0 || onnx_axis >= input_rank)
+  {
+#ifdef LL_SW_ENABLE_ASSERTS
+    LL_ATON_ASSERT(0 && "Gather axis index not supported");
+#endif
+    return -1;
+  }
+
+  const int padded_axis = onnx_axis + (4 - input_rank);
+  if (padded_axis == 0)
+  {
+#ifdef LL_SW_ENABLE_ASSERTS
+    LL_ATON_ASSERT(0 && "Gather along the batch axis not supported");
+#endif
+    return -1;
+  }
+
+  return helper_emit_shape_index_axis(padded_axis);
+}
+
+static int32_t helper_emit_type_from_bytesize(int bytesize, bool is_signed)
+{
+  if (bytesize == 1)
+  {
+    return is_signed ? AI_ARRAY_FORMAT_S8 : AI_ARRAY_FORMAT_U8;
+  }
+  else if (bytesize == 2)
+  {
+    return is_signed ? AI_ARRAY_FORMAT_S16 : AI_ARRAY_FORMAT_U16;
+  }
+  else if (bytesize == 4)
+  {
+    return is_signed ? AI_ARRAY_FORMAT_S32 : AI_ARRAY_FORMAT_U32;
+  }
+  else
+  {
+#ifdef LL_SW_ENABLE_ASSERTS
+    LL_ATON_ASSERT(0 && "bytesize not supported");
+#endif
+    return -1;
+  }
+}
+
+static int16_t helper_emit_buffer_meta_flag_from_bytesize(int bytesize, bool is_signed)
+{
+  if (bytesize == 1)
+  {
+    return is_signed ? AI_BUFFER_META_FLAG_ZEROPOINT_S8 : AI_BUFFER_META_FLAG_ZEROPOINT_U8;
+  }
+  else if (bytesize == 2 || bytesize == 4)
+  {
+    return is_signed ? AI_BUFFER_META_FLAG_ZEROPOINT_S16 : AI_BUFFER_META_FLAG_ZEROPOINT_U16;
+  }
+  else
+  {
+#ifdef LL_SW_ENABLE_ASSERTS
+    LL_ATON_ASSERT(0 && "metaflag: bytesize not supported");
+#endif
+    return -1;
+  }
+}
+
+/** QLinearMatMul forward function */
+void ll_sw_forward_qlinearmatmul(Qlinearmatmul_sw_info *sw_info)
+{
   /*
   1. reshape of the weights from weights tensor -> weights_perm tensor
   2. map the matmul operation on the library dense_forward function.
@@ -171,18 +246,16 @@ void ll_sw_forward_qlinearmatmul(/* int processor, */ void *sw_info_struct)
   memset(sw_info->bias.mem.start_offset, 0x0, sw_info->bias.dim.num_elem * 4);
 
   // layer initialization
-  AI_LAYER_OBJ_DECLARE(dense_layer, 1, DENSE_TYPE, 0x0, NULL, dense, forward_dense_integer /*_fixed*/, &dense_chain,
-                       NULL, NULL, , )
+  AI_LAYER_OBJ_DECLARE(dense_layer, 1, DENSE_TYPE, 0x0, NULL, dense, forward_dense_integer, &dense_chain, NULL, NULL,
+                       , )
 
   dense_layer.forward(AI_LAYER_OBJ(&dense_layer));
 }
 
 //##########################################################################################
 /** QLinearMatMul forward function */
-void ll_sw_forward_gemm_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_gemm_integer(Gemm_integer_sw_info *sw_info)
 {
-  Gemm_integer_sw_info *sw_info = (Gemm_integer_sw_info *)sw_info_struct;
-
   /*
   1. reshape of the weights from weights tensor -> weights_perm tensor
   2. map the matmul operation on the library dense_forward function.
@@ -282,28 +355,27 @@ void ll_sw_forward_gemm_integer(/* int processor, */ void *sw_info_struct)
                               AI_TENSOR_LIST_OBJ_INIT(AI_FLAG_NONE, 1, TENSORS(&dense_scratch0)))
 
   // layer initialization
-  AI_LAYER_OBJ_DECLARE(dense_layer, 1, DENSE_TYPE, 0x0, NULL, dense, forward_dense_integer /*_fixed*/, &dense_chain,
-                       NULL, NULL, , )
+  AI_LAYER_OBJ_DECLARE(dense_layer, 1, DENSE_TYPE, 0x0, NULL, dense, forward_dense_integer, &dense_chain, NULL, NULL,
+                       , )
 
   dense_layer.forward(AI_LAYER_OBJ(&dense_layer));
 }
 
 //##########################################################################################
 /** QuantizeLinear forward function */
-void ll_sw_forward_quantizelinear(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_quantizelinear(Quantizelinear_sw_info *sw_info)
 {
-  Quantizelinear_sw_info *sw_info = (Quantizelinear_sw_info *)sw_info_struct;
-
   // array init
   AI_ARRAY_OBJ_DECLARE(input_output_array, AI_ARRAY_FORMAT_FLOAT, sw_info->general.input.mem.start_offset,
-                       sw_info->general.input.mem.start_offset, sw_info->general.input.dim.num_elem, )
-  int32_t format = sw_info->general.output.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
-                                                            : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
+                       sw_info->general.input.mem.start_offset, sw_info->general.input.dim.num_elem, );
+  int32_t format =
+      (helper_emit_type_from_bytesize(sw_info->general.output.stride.c, sw_info->general.output.format.is_signed) |
+       AI_FMT_FLAG_IS_IO);
   AI_ARRAY_OBJ_DECLARE(quantize_output_array, format, sw_info->general.output.mem.start_offset,
-                       sw_info->general.output.mem.start_offset, sw_info->general.output.dim.num_elem, )
+                       sw_info->general.output.mem.start_offset, sw_info->general.output.dim.num_elem, );
 
-  uint16_t offset_format =
-      sw_info->os.format.is_signed ? (AI_BUFFER_META_FLAG_ZEROPOINT_S8) : (AI_BUFFER_META_FLAG_ZEROPOINT_U8);
+  uint16_t offset_format = helper_emit_buffer_meta_flag_from_bytesize(sw_info->general.output.stride.c,
+                                                                      sw_info->general.output.format.is_signed);
   uint16_t scale_format = AI_BUFFER_META_FLAG_SCALE_FLOAT;
   ai_intq_info_list output_intq = {.flags = (offset_format | scale_format),
                                    .size = sw_info->os.dim.num_elem,
@@ -311,7 +383,9 @@ void ll_sw_forward_quantizelinear(/* int processor, */ void *sw_info_struct)
                                        .scale = ((float *)sw_info->os.mem.start_offset),
                                        .zeropoint = ((void *)sw_info->ozp.mem.start_offset),
                                    }}};
-
+  // printf("QuantizeLinear forward: output quantization params: scale=%f, zeropoint=%d\n",
+  //        ((float *)sw_info->os.mem.start_offset)[0],
+  //        *((int16_t *)sw_info->ozp.mem.start_offset)); // assuming 8 bit quantization for printing
   AI_TENSOR_OBJ_DECLARE(input_output, , 0x0, 4,
                         SHAPE_INIT(sw_info->general.input.dim.tensor_h, sw_info->general.input.dim.tensor_w,
                                    sw_info->general.input.dim.tensor_c, sw_info->general.input.dim.tensor_b),
@@ -330,27 +404,27 @@ void ll_sw_forward_quantizelinear(/* int processor, */ void *sw_info_struct)
                               AI_TENSOR_LIST_OBJ_EMPTY, AI_TENSOR_LIST_OBJ_EMPTY)
 
   // layer initialization
-  AI_LAYER_OBJ_DECLARE(quantize_layer, 1, NL_TYPE, 0x0, NULL, nl, node_convert /*_fixed*/, &quantize_chain, NULL,
-                       NULL, )
+  AI_LAYER_OBJ_DECLARE(quantize_layer, 1, NL_TYPE, 0x0, NULL, nl,
+                       sw_info->general.output.stride.c == 1 ? node_convert : node_convert_if32os16, &quantize_chain,
+                       NULL, NULL, )
   quantize_layer.forward(AI_LAYER_OBJ(&quantize_layer));
 }
 
 //##########################################################################################
 /** Dequantizelinear forward function */
-void ll_sw_forward_dequantizelinear(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_dequantizelinear(Dequantizelinear_sw_info *sw_info)
 {
-  Dequantizelinear_sw_info *sw_info = (Dequantizelinear_sw_info *)sw_info_struct;
-
   // array init
-  int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
-                                                           : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
+  int32_t format =
+      (helper_emit_type_from_bytesize(sw_info->general.input.stride.c, sw_info->general.input.format.is_signed) |
+       AI_FMT_FLAG_IS_IO);
   AI_ARRAY_OBJ_DECLARE(input_output_array, format, sw_info->general.input.mem.start_offset,
-                       sw_info->general.input.mem.start_offset, sw_info->general.input.dim.num_elem, )
+                       sw_info->general.input.mem.start_offset, sw_info->general.input.dim.num_elem, );
   AI_ARRAY_OBJ_DECLARE(dequantize_output_array, FORMAT, sw_info->general.output.mem.start_offset,
-                       sw_info->general.output.mem.start_offset, sw_info->general.output.dim.num_elem, )
+                       sw_info->general.output.mem.start_offset, sw_info->general.output.dim.num_elem, );
 
-  uint16_t offset_format =
-      sw_info->is.format.is_signed ? (AI_BUFFER_META_FLAG_ZEROPOINT_S8) : (AI_BUFFER_META_FLAG_ZEROPOINT_U8);
+  uint16_t offset_format = helper_emit_buffer_meta_flag_from_bytesize(sw_info->general.input.stride.c,
+                                                                      sw_info->general.input.format.is_signed);
   uint16_t scale_format = AI_BUFFER_META_FLAG_SCALE_FLOAT;
   ai_intq_info_list input_intq = {.flags = (offset_format | scale_format),
                                   .size = sw_info->is.dim.num_elem,
@@ -379,16 +453,16 @@ void ll_sw_forward_dequantizelinear(/* int processor, */ void *sw_info_struct)
                               AI_TENSOR_LIST_OBJ_EMPTY, AI_TENSOR_LIST_OBJ_EMPTY)
 
   // layer initialization
-  AI_LAYER_OBJ_DECLARE(dequantize_layer, 1, NL_TYPE, 0x0, NULL, nl, node_convert /*_fixed*/, &dequantize_chain, NULL,
-                       NULL, )
+  AI_LAYER_OBJ_DECLARE(dequantize_layer, 1, NL_TYPE, 0x0, NULL, nl,
+                       sw_info->general.input.stride.c == 1 ? node_convert : node_convert_is16of32, &dequantize_chain,
+                       NULL, NULL, )
   dequantize_layer.forward(AI_LAYER_OBJ(&dequantize_layer));
 }
 
 //##########################################################################################
 /** QuantizeLinear forward function */
-void ll_sw_forward_requantizelinear(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_requantizelinear(Requantizelinear_sw_info *sw_info)
 {
-  Requantizelinear_sw_info *sw_info = (Requantizelinear_sw_info *)sw_info_struct;
   // array init
   int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
                                                            : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
@@ -439,17 +513,15 @@ void ll_sw_forward_requantizelinear(/* int processor, */ void *sw_info_struct)
                               AI_TENSOR_LIST_OBJ_EMPTY, AI_TENSOR_LIST_OBJ_EMPTY)
 
   // layer initialization
-  AI_LAYER_OBJ_DECLARE(requantize_layer, 1, NL_TYPE, 0x0, NULL, nl, node_convert_integer /*_fixed*/, &requantize_chain,
-                       NULL, NULL, )
+  AI_LAYER_OBJ_DECLARE(requantize_layer, 1, NL_TYPE, 0x0, NULL, nl, node_convert_integer, &requantize_chain, NULL,
+                       NULL, )
   requantize_layer.forward(AI_LAYER_OBJ(&requantize_layer));
 }
 
 //##########################################################################################
 /** Conv integer forward function */
-void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_conv_integer(Conv_integer_sw_info *sw_info)
 {
-  Conv_integer_sw_info *sw_info = (Conv_integer_sw_info *)sw_info_struct;
-
   int32_t format;
   // array init
   format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
@@ -543,12 +615,12 @@ void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
 #ifdef LL_SW_DUMP_DEBUG
     LL_ATON_PRINTF("POINTWISE");
 #endif
-    AI_LAYER_OBJ_DECLARE(
-        conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_pw_sssa8_ch /*_fixed*/, &conv_chain, NULL, NULL, ,
-        .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
-        .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]), // controlla perche' non mi convince
-        .filter_pad = SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
-        .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
+    AI_LAYER_OBJ_DECLARE(conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_pw_sssa8_ch, &conv_chain, NULL, NULL, ,
+                         .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
+                         .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]),
+                         .filter_pad =
+                             SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
+                         .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
     conv_layer.forward(AI_LAYER_OBJ(&conv_layer));
   }
   break;
@@ -557,12 +629,12 @@ void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
 #ifdef LL_SW_DUMP_DEBUG
     LL_ATON_PRINTF("RGB");
 #endif
-    AI_LAYER_OBJ_DECLARE(
-        conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_rgb_sssa8_ch /*_fixed*/, &conv_chain, NULL, NULL,
-        , .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
-        .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]), // controlla perche' non mi convince
-        .filter_pad = SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
-        .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
+    AI_LAYER_OBJ_DECLARE(conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_rgb_sssa8_ch, &conv_chain, NULL,
+                         NULL, , .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
+                         .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]),
+                         .filter_pad =
+                             SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
+                         .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
     conv_layer.forward(AI_LAYER_OBJ(&conv_layer));
   }
   break;
@@ -571,12 +643,12 @@ void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
 #ifdef LL_SW_DUMP_DEBUG
     LL_ATON_PRINTF("GROUP");
 #endif
-    AI_LAYER_OBJ_DECLARE(
-        conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_dw_dm_sssa8_ch /*_fixed*/, &conv_chain, NULL, NULL, ,
-        .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
-        .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]), // controlla perche' non mi convince
-        .filter_pad = SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
-        .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
+    AI_LAYER_OBJ_DECLARE(conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_dw_dm_sssa8_ch, &conv_chain, NULL, NULL,
+                         , .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
+                         .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]),
+                         .filter_pad =
+                             SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
+                         .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
     conv_layer.forward(AI_LAYER_OBJ(&conv_layer));
   }
   break;
@@ -585,12 +657,12 @@ void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
 #ifdef LL_SW_DUMP_DEBUG
     LL_ATON_PRINTF("DILATION");
 #endif
-    AI_LAYER_OBJ_DECLARE(
-        conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_dilated_sssa8_ch /*_fixed*/, &conv_chain, NULL,
-        NULL, , .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
-        .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]), // controlla perche' non mi convince
-        .filter_pad = SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
-        .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
+    AI_LAYER_OBJ_DECLARE(conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_dilated_sssa8_ch, &conv_chain,
+                         NULL, NULL, , .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
+                         .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]),
+                         .filter_pad =
+                             SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
+                         .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
     conv_layer.forward(AI_LAYER_OBJ(&conv_layer));
   }
   break;
@@ -599,12 +671,12 @@ void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
 #ifdef LL_SW_DUMP_DEBUG
     LL_ATON_PRINTF("GENERAL CH");
 #endif
-    AI_LAYER_OBJ_DECLARE(
-        conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_sssa8_ch /*_fixed*/, &conv_chain, NULL, NULL, ,
-        .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
-        .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]), // controlla perche' non mi convince
-        .filter_pad = SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
-        .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
+    AI_LAYER_OBJ_DECLARE(conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_sssa8_ch, &conv_chain, NULL,
+                         NULL, , .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
+                         .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]),
+                         .filter_pad =
+                             SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
+                         .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
     conv_layer.forward(AI_LAYER_OBJ(&conv_layer));
   }
   break;
@@ -613,12 +685,12 @@ void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
 #ifdef LL_SW_DUMP_DEBUG
     LL_ATON_PRINTF("GENERAL UNSIGEND per CHANNEL");
 #endif
-    AI_LAYER_OBJ_DECLARE(
-        conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_integer /*_fixed*/, &conv_chain, NULL, NULL, ,
-        .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
-        .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]), // controlla perche' non mi convince
-        .filter_pad = SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
-        .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
+    AI_LAYER_OBJ_DECLARE(conv_layer, 1, CONV2D_TYPE, 0x0, NULL, conv2d, forward_conv2d_integer, &conv_chain, NULL, NULL,
+                         , .groups = sw_info->ngroup, .nl_params = NULL, .nl_func = NULL,
+                         .filter_stride = SHAPE_2D_INIT(sw_info->strides[0], sw_info->strides[1]),
+                         .filter_pad =
+                             SHAPE_INIT(sw_info->pads[3], sw_info->pads[2], sw_info->pads[1], sw_info->pads[0]),
+                         .dilation = SHAPE_2D_INIT(sw_info->dilations[0], sw_info->dilations[1]), )
     conv_layer.forward(AI_LAYER_OBJ(&conv_layer));
   }
   break;
@@ -629,10 +701,8 @@ void ll_sw_forward_conv_integer(/* int processor, */ void *sw_info_struct)
 
 //##########################################################################################
 /** Element Wise forward function */
-void ll_sw_forward_eltwise_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_eltwise_integer(Eltwise_integer_sw_info *sw_info)
 {
-  Eltwise_integer_sw_info *sw_info = (Eltwise_integer_sw_info *)sw_info_struct;
-
   // array init
   int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
                                                            : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
@@ -750,10 +820,8 @@ void ll_sw_forward_eltwise_integer(/* int processor, */ void *sw_info_struct)
 
 //##########################################################################################
 /** Pool forward function */
-void ll_sw_forward_pool_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_pool_integer(Pool_integer_sw_info *sw_info)
 {
-  Pool_integer_sw_info *sw_info = (Pool_integer_sw_info *)sw_info_struct;
-
   // array init
   int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
                                                            : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
@@ -834,10 +902,8 @@ void ll_sw_forward_pool_integer(/* int processor, */ void *sw_info_struct)
 
 //##########################################################################################
 /** Pool forward function */
-void ll_sw_forward_global_pool_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_global_pool_integer(Global_pool_integer_sw_info *sw_info)
 {
-  Global_pool_integer_sw_info *sw_info = (Global_pool_integer_sw_info *)sw_info_struct;
-
   // array init
   int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
                                                            : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
@@ -916,10 +982,8 @@ void ll_sw_forward_global_pool_integer(/* int processor, */ void *sw_info_struct
 
 //##########################################################################################
 /** Softmax forward function */
-void ll_sw_forward_softmax_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_softmax_integer(Softmax_integer_sw_info *sw_info)
 {
-  Softmax_integer_sw_info *sw_info = (Softmax_integer_sw_info *)sw_info_struct;
-
   // array init
   int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
                                                            : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
@@ -990,10 +1054,8 @@ void ll_sw_forward_softmax_integer(/* int processor, */ void *sw_info_struct)
 
 //##########################################################################################
 /** Activ forward function */
-void ll_sw_forward_activ_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_activ_integer(Activ_integer_sw_info *sw_info)
 {
-  Activ_integer_sw_info *sw_info = (Activ_integer_sw_info *)sw_info_struct;
-
   // array init
   int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
                                                            : (AI_ARRAY_FORMAT_U8 | AI_FMT_FLAG_IS_IO);
@@ -1128,9 +1190,8 @@ void ll_sw_forward_activ_integer(/* int processor, */ void *sw_info_struct)
 
 //##########################################################################################
 /** Resize forward function */
-void ll_sw_forward_resize_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_resize_integer(Resize_integer_sw_info *sw_info)
 {
-  Resize_integer_sw_info *sw_info = (Resize_integer_sw_info *)sw_info_struct;
   // array init
 
   int32_t format = sw_info->general.input.format.is_signed ? (AI_ARRAY_FORMAT_S8 | AI_FMT_FLAG_IS_IO)
@@ -1239,9 +1300,8 @@ void ll_sw_forward_resize_integer(/* int processor, */ void *sw_info_struct)
 
 //##########################################################################################
 /** ArgMax forward function  */
-void ll_sw_forward_argmax_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_argmax_integer(Argmax_integer_sw_info *sw_info)
 {
-  Argmax_sw_info *sw_info = (Argmax_sw_info *)sw_info_struct;
   AI_ARRAY_OBJ_DECLARE(input_output_array, AI_ARRAY_FORMAT_S8, sw_info->general.input.mem.start_offset,
                        sw_info->general.input.mem.start_offset, sw_info->general.input.dim.num_elem, )
   AI_ARRAY_OBJ_DECLARE(argmax_output_array, AI_ARRAY_FORMAT_S32, sw_info->general.output.mem.start_offset,
@@ -1272,9 +1332,8 @@ void ll_sw_forward_argmax_integer(/* int processor, */ void *sw_info_struct)
 
 //##########################################################################################
 /** ArgMin forward function  */
-void ll_sw_forward_argmin_integer(/* int processor, */ void *sw_info_struct)
+void ll_sw_forward_argmin_integer(Argmin_integer_sw_info *sw_info)
 {
-  Argmin_sw_info *sw_info = (Argmin_sw_info *)sw_info_struct;
   AI_ARRAY_OBJ_DECLARE(input_output_array, AI_ARRAY_FORMAT_S8, sw_info->general.input.mem.start_offset,
                        sw_info->general.input.mem.start_offset, sw_info->general.input.dim.num_elem, )
   AI_ARRAY_OBJ_DECLARE(argmin_output_array, AI_ARRAY_FORMAT_S32, sw_info->general.output.mem.start_offset,
@@ -1301,6 +1360,92 @@ void ll_sw_forward_argmin_integer(/* int processor, */ void *sw_info_struct)
                        NULL, , .axis = helper_emit_shape_index_axis(sw_info->axis),
                        .select_last_index = sw_info->select_last_index, )
   argmin_layer.forward(AI_LAYER_OBJ(&argmin_layer));
+}
+
+//##########################################################################################
+/** Tile forward function  */
+void ll_sw_forward_tile_integer(Tile_integer_sw_info *sw_info)
+{
+  AI_ARRAY_OBJ_DECLARE(
+      input_output_array,
+      helper_emit_type_from_bytesize(sw_info->general.input.stride.c, sw_info->general.input.format.is_signed),
+      sw_info->general.input.mem.start_offset, sw_info->general.input.mem.start_offset,
+      sw_info->general.input.dim.num_elem, )
+  AI_ARRAY_OBJ_DECLARE(
+      tile_output_array,
+      helper_emit_type_from_bytesize(sw_info->general.output.stride.c, sw_info->general.output.format.is_signed),
+      sw_info->general.output.mem.start_offset, sw_info->general.output.mem.start_offset,
+      sw_info->general.output.dim.num_elem, )
+
+  // tensors init
+  AI_TENSOR_OBJ_DECLARE(input_output, , 0x0, 4,
+                        SHAPE_INIT(sw_info->general.input.dim.tensor_h, sw_info->general.input.dim.tensor_w,
+                                   sw_info->general.input.dim.tensor_c, sw_info->general.input.dim.tensor_b),
+                        STRIDE_INIT(sw_info->general.input.stride.h, sw_info->general.input.stride.w,
+                                    sw_info->general.input.stride.c, sw_info->general.input.stride.b),
+                        1, &input_output_array, NULL)
+  AI_TENSOR_OBJ_DECLARE(tile_output, , 0x0, 4,
+                        SHAPE_INIT(sw_info->general.output.dim.tensor_h, sw_info->general.output.dim.tensor_w,
+                                   sw_info->general.output.dim.tensor_c, sw_info->general.output.dim.tensor_b),
+                        STRIDE_INIT(sw_info->general.output.stride.h, sw_info->general.output.stride.w,
+                                    sw_info->general.output.stride.c, sw_info->general.output.stride.b),
+                        1, &tile_output_array, NULL)
+
+  // tensor chains init
+  AI_TENSOR_CHAIN_OBJ_DECLARE(tile_chain, , 4, AI_TENSOR_LIST_OBJ_INIT(AI_FLAG_NONE, 1, TENSORS(&input_output)),
+                              AI_TENSOR_LIST_OBJ_INIT(AI_FLAG_NONE, 1, TENSORS(&tile_output)), AI_TENSOR_LIST_OBJ_EMPTY,
+                              AI_TENSOR_LIST_OBJ_EMPTY)
+
+  AI_ARRAY_OBJ_DECLARE_STATIC(repeats, ai_i16, AI_ARRAY_FORMAT_S16, AI_CONST, 5, sw_info->repeats[2],
+                              sw_info->repeats[3], sw_info->repeats[1], sw_info->repeats[0], 1)
+
+  // TODO//layer initialization
+  AI_LAYER_OBJ_DECLARE(Tile_layer, 2, TILE_TYPE, 0x0, NULL, tile, forward_tile, &tile_chain, NULL, NULL, ,
+                       .repeats = AI_ARRAY_OBJ(&repeats))
+
+  Tile_layer.forward(AI_LAYER_OBJ(&Tile_layer));
+}
+
+//##########################################################################################
+/** Gather forward function  */
+void ll_sw_forward_gather_integer(Gather_integer_sw_info *sw_info)
+{
+  AI_ARRAY_OBJ_DECLARE(input_output_array, AI_ARRAY_FORMAT_S8, sw_info->general.input.mem.start_offset,
+                       sw_info->general.input.mem.start_offset, sw_info->general.input.dim.num_elem, )
+  AI_ARRAY_OBJ_DECLARE(indexes_array, AI_ARRAY_FORMAT_S32, sw_info->operand.mem.start_offset,
+                       sw_info->operand.mem.start_offset, sw_info->operand.dim.num_elem, )
+  AI_ARRAY_OBJ_DECLARE(gather_output_array, AI_ARRAY_FORMAT_S8, sw_info->general.output.mem.start_offset,
+                       sw_info->general.output.mem.start_offset, sw_info->general.output.dim.num_elem, )
+  // tensor init
+  AI_TENSOR_OBJ_DECLARE(input_output, , 0x0, 4,
+                        SHAPE_INIT(sw_info->general.input.dim.tensor_h, sw_info->general.input.dim.tensor_w,
+                                   sw_info->general.input.dim.tensor_c, sw_info->general.input.dim.tensor_b),
+                        STRIDE_INIT(sw_info->general.input.stride.h, sw_info->general.input.stride.w,
+                                    sw_info->general.input.stride.c, sw_info->general.input.stride.b),
+                        1, &input_output_array, NULL)
+  AI_TENSOR_OBJ_DECLARE(indexes, , 0x0, 4,
+                        SHAPE_INIT(sw_info->operand.dim.tensor_h, sw_info->operand.dim.tensor_w,
+                                   sw_info->operand.dim.tensor_c, sw_info->operand.dim.tensor_b),
+                        STRIDE_INIT(sw_info->operand.stride.h, sw_info->operand.stride.w, sw_info->operand.stride.c,
+                                    sw_info->operand.stride.b),
+                        1, &indexes_array, NULL)
+  AI_TENSOR_OBJ_DECLARE(gather_output, , 0x0, 4,
+                        SHAPE_INIT(sw_info->general.output.dim.tensor_h, sw_info->general.output.dim.tensor_w,
+                                   sw_info->general.output.dim.tensor_c, sw_info->general.output.dim.tensor_b),
+                        STRIDE_INIT(sw_info->general.output.stride.h, sw_info->general.output.stride.w,
+                                    sw_info->general.output.stride.c, sw_info->general.output.stride.b),
+                        1, &gather_output_array, NULL)
+  // tensor chain initialization
+  AI_TENSOR_CHAIN_OBJ_DECLARE(gather_chain, , 4,
+                              AI_TENSOR_LIST_OBJ_INIT(AI_FLAG_NONE, 2, TENSORS(&input_output), TENSORS(&indexes)),
+                              AI_TENSOR_LIST_OBJ_INIT(AI_FLAG_NONE, 1, TENSORS(&gather_output)),
+                              AI_TENSOR_LIST_OBJ_EMPTY, AI_TENSOR_LIST_OBJ_EMPTY)
+  // LL_ATON_PRINTF("axis %d \n", sw_info->axis);
+  // LL_ATON_PRINTF("index %d \n", *(int32_t *)(sw_info->operand.mem.start_offset));
+  // LL_ATON_FFLUSH(stdout);
+  AI_LAYER_OBJ_DECLARE(gather_layer, 1, GATHER_TYPE, 0x0, NULL, gather, forward_gather, &gather_chain, NULL, NULL, ,
+                       .axis = helper_emit_gather_shape_index_axis(sw_info->axis, sw_info->input_rank), )
+  gather_layer.forward(AI_LAYER_OBJ(&gather_layer));
 }
 
 #endif // LL_ATON_SW_FALLBACK == 1

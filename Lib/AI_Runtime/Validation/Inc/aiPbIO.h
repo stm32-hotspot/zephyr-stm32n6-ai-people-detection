@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiPbIO.h
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Low Level ProtoBuffer IO functions for COM stack
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2021 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in

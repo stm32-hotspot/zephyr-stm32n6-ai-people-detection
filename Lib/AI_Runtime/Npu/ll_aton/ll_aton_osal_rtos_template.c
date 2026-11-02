@@ -1,13 +1,13 @@
 /**
  ******************************************************************************
  * @file    ll_aton_osal_rtos_template.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Generic template implementation of DAO mutex mechanism
  *          (underlying OS/platform agnostic)
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2024-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file

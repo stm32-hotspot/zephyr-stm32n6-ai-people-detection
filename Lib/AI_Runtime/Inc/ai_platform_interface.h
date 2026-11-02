@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    ai_platform_interface.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   Definitions of AI platform interface APIs types
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2018 STMicroelectronics.
+  * Copyright (c) 2018 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -486,6 +486,9 @@ AI_PACKED_STRUCT_END
 typedef union {
   ai_handle     handle;
   ai_ptr        ptr;
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+  ai_f16*       float16;
+#endif
   ai_float*     float32;
   ai_double*    float64;
   ai_u8*        u8;

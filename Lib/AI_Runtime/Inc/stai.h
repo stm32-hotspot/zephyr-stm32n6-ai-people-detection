@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2023 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -25,8 +25,8 @@
 #define STAI_API_VERSION_MINOR        (0)
 #define STAI_API_VERSION_MICRO        (0)
 
-#define STAI_TOOLS_VERSION_MAJOR      (3)
-#define STAI_TOOLS_VERSION_MINOR      (0)
+#define STAI_TOOLS_VERSION_MAJOR      (4)
+#define STAI_TOOLS_VERSION_MINOR      (1)
 #define STAI_TOOLS_VERSION_MICRO      (0)
 
 /*****************************************************************************/
@@ -61,6 +61,10 @@
   #define _STAI_ALIGNED_16        _Pragma("data_alignment = 16")
   #define _STAI_ALIGNED_32        _Pragma("data_alignment = 32")
   #define _STAI_ALIGNED_64        _Pragma("data_alignment = 64")
+#elif defined(__ghs__)
+  /* GHS macros definition */
+  #define STAI_API_ENTRY          /* STAI_API_ENTRY */
+  #define STAI_ALIGNED(x)         __attribute__((aligned(x)))
 #elif defined(__CC_ARM)
   #define STAI_API_ENTRY          __attribute__((visibility("default")))
   #define STAI_ALIGNED(x)         __attribute__((aligned (x)))
@@ -197,6 +201,7 @@ typedef enum {
 typedef enum {
   STAI_FORMAT_NONE              = 0x00000040,
 
+  STAI_FORMAT_FLOAT16           = 0x00820840,
   STAI_FORMAT_FLOAT32           = 0x00821040,
   STAI_FORMAT_FLOAT64           = 0x00822040,
 

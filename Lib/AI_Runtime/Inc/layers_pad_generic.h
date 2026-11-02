@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    layers_pad_generic.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform padding generic datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
+  * Copyright (c) 2022 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

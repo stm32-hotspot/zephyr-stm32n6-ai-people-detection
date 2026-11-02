@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_osal_zephyr.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Interface to Zephyr as the underlying OS/platform for ATON
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2024-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -17,6 +17,8 @@
  */
 
 #include "ll_aton_config.h"
+
+#include "ll_aton_util.h"
 
 #if (LL_ATON_OSAL == LL_ATON_OSAL_ZEPHYR)
 

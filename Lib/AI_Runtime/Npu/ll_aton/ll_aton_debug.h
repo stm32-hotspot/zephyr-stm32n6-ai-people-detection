@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_debug.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file of ATON LL low level lib debug module.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2021-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -27,11 +27,12 @@ extern "C"
 #include <stdint.h>
 
 #include "ll_aton_NN_interface.h"
+#include "ll_aton_attributes.h"
 #include "ll_aton_platform.h"
 
   /**
-   *  * @brief enumerator type for dump_xxx functions
-   *   */
+   * @brief enumerator type for dump_xxx functions
+   */
   enum
   {
     MODE_RAW = 0x1,     // Dump buffer with data as is present in memory (i.e. flattened)
@@ -50,7 +51,7 @@ extern "C"
   };
 
   /**
-   *  @brief enumerator type identifying buffer group (in,out,internal) for dump_xxx functions
+   * @brief enumerator type identifying buffer group (in,out,internal) for dump_xxx functions
    */
   enum
   {
@@ -69,21 +70,21 @@ extern "C"
   /**
    * @brief  retrieve pointer to a given graph in/output buffer
    * @param  bufname tensor name
-   * @param  buffer group identifier
-   * @param  pointer to integer to be set with buffer length
-   * @param  pointer to integer to be set with buffer bitwidth
-   * @param  pointer to neural network interface structure
+   * @param  in buffer group identifier
+   * @param  _len pointer to integer to be set with buffer length
+   * @param  _bits pointer to integer to be set with buffer bitwidth
+   * @param  nn_interface pointer to neural network interface structure
    * @retval pointer to buffer or null of not found
    */
-  void *get_buffer(const char *bufname, int in, unsigned *_len, unsigned *_bits,
+  void *get_buffer(const char *bufname, int in, unsigned int *_len, unsigned int *_bits,
                    const NN_Interface_TypeDef *nn_interface);
 
   /**
    * @brief  retrieve buffer info structure for a given graph in/output buffer
    * @param  bufname tensor name
-   * @param  buffer group identifier
-   * @param  pointer to LL_Buffer_InfoTypeDef to be used to store buffer info
-   * @param  pointer to neural network interface structure
+   * @param  in buffer group identifier
+   * @param  ret pointer to LL_Buffer_InfoTypeDef to be used to store buffer info
+   * @param  nn_interface pointer to neural network interface structure
    * @retval 1 if buffer is found 0 otherwise
    */
   int get_buffer_info(const char *bufname, int in, LL_Buffer_InfoTypeDef *ret,
@@ -93,17 +94,17 @@ extern "C"
    * @brief  fill all buffers according to buffer group identifier with a given value
    * @param  in group identifier
    * @param  val filler value
-   * @param  pointer to neural network interface structure
+   * @param  nn_interface pointer to neural network interface structure
    * @retval none
    */
-  void set_all_buffers(int in, unsigned val, const NN_Interface_TypeDef *nn_interface);
+  void set_all_buffers(int in, unsigned int val, const NN_Interface_TypeDef *nn_interface);
 
   /**
    * @brief  dump a buffer with a given mode
    * @param  mode dump mode specifier
    * @param  bufname tensor name
    * @param  in buffer group identifier
-   * @param  pointer to neural network interface structure
+   * @param  nn_interface pointer to neural network interface structure
    * @retval none
    */
   void dump_buffer(int mode, const char *bufname, int in, const NN_Interface_TypeDef *nn_interface);
@@ -112,7 +113,7 @@ extern "C"
    * @brief  dump all buffers according to buffer group identifier with a given mode
    * @param  mode dump mode specifier
    * @param  in buffer groups identifiers
-   * @param  pointer to neural network interface structure
+   * @param  nn_interface pointer to neural network interface structure
    * @retval none
    */
   void dump_all_buffers(int mode, int in, const NN_Interface_TypeDef *nn_interface);
@@ -122,52 +123,50 @@ extern "C"
    * explicitly)
    * @param  mode dump mode specifier
    * @param  epoch epoch number
+   * @param  nn_interface pointer to neural network interface structure
    * @retval none
    */
   void dump_epoch_buffers(int mode, int epoch, const NN_Interface_TypeDef *nn_interface);
 
-// Deprecated methods, implemented as wrappers around new methods
-#if defined(__GNUC__)
-  static inline void dump_tensor_Qmn(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
-      __attribute__((deprecated("use dump_buffer method")));
-  static inline void dump_output_16bit(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
-      __attribute__((deprecated("use dump_buffer method")));
-  static inline void dump_output_8bit(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
-      __attribute__((deprecated("use dump_buffer method")));
-  static inline void dump_all_epoch_buffers(int mode, int epoch, int in, const NN_Interface_TypeDef *nn_interface)
-      __attribute__((deprecated("use dump_epoch_buffers method")));
-#else
-static inline void dump_tensor_Qmn(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
-    __attribute__((deprecated));
-static inline void dump_output_16bit(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
-    __attribute__((deprecated));
-static inline void dump_output_8bit(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
-    __attribute__((deprecated));
-static inline void dump_all_epoch_buffers(int mode, int epoch, int in, const NN_Interface_TypeDef *nn_interface)
-    __attribute__((deprecated));
-#endif
+  /**
+   * @brief  Return the total length of network parameters
+   * @param  nn_interface pointer to neural network interface structure
+   * @retval number of buffer info structure available
+   */
+  unsigned int get_params_len(const NN_Interface_TypeDef *nn_interface);
 
+  /**
+   * Deprecated methods, implemented as wrappers around new methods
+   *
+   * @{
+   */
+
+  LL_ATON_DEPRECATED("use dump_buffer method")
   static inline void dump_tensor_Qmn(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
   {
     dump_buffer(MODE_ONNX_INFLOAT, bufname, in, nn_interface);
   }
 
+  LL_ATON_DEPRECATED("use dump_buffer method")
   static inline void dump_output_16bit(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
   {
     dump_buffer(MODE_RAW_INBITS, bufname, in, nn_interface);
   }
 
+  LL_ATON_DEPRECATED("use dump_buffer method")
   static inline void dump_output_8bit(const char *bufname, int in, const NN_Interface_TypeDef *nn_interface)
   {
     dump_buffer(MODE_RAW_INBITS, bufname, in, nn_interface);
   }
 
+  LL_ATON_DEPRECATED("use dump_epoch_buffers method")
   static inline void dump_all_epoch_buffers(int mode, int epoch, int in, const NN_Interface_TypeDef *nn_interface)
   {
+    LL_ATON_LIB_UNUSED(in);
     dump_epoch_buffers(mode, epoch, nn_interface);
   }
 
-  unsigned int get_params_len(const NN_Interface_TypeDef *nn_interface);
+  // @}
 
 #ifdef __cplusplus
 }

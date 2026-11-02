@@ -24,8 +24,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(app LANGUAGES C)
 
 target_include_directories(app PRIVATE inc Model)
-target_sources(app PRIVATE src/main.c src/model.c Model/network.c Model/stai_network.c src/npu_cache_hack.c
-                           src/zephyr_logo.c)
+target_sources(app PRIVATE src/main.c src/model.c Model/network.c Model/stai_network.c src/zephyr_logo.c)
 
 # lib_vision_models_pp
 target_include_directories(app PRIVATE ../Lib/lib_vision_models_pp/lib_vision_models_pp/Inc
@@ -65,10 +64,9 @@ target_sources(app PRIVATE ../Lib/AI_Runtime/Npu/ll_aton/ll_aton.c
                ../Lib/AI_Runtime/Npu/ll_aton/ll_sw_float.c
                ../Lib/AI_Runtime/Npu/ll_aton/ll_sw_integer.c
                ../Lib/AI_Runtime/Npu/ll_aton/ecloader.c
-# temporary disable npu_cache.c which is replace by npu_cache_hack.c due to bad header inclusion order
-#               ../Lib/AI_Runtime/Npu/Devices/STM32N6xx/npu_cache.c
+               ../Lib/AI_Runtime/Npu/Devices/STM32N6xx/npu_cache.c
                ../Lib/AI_Runtime/Npu/Devices/STM32N6xx/mcu_cache.c)
 
 target_link_directories(app PUBLIC ../Lib/AI_Runtime/Lib/GCC/ARMCortexM55)
 
-target_link_libraries(app PRIVATE :NetworkRuntime1100_CM55_GCC.a)
+target_link_libraries(app PRIVATE :NetworkRuntime1210_CM55_GCC.a)

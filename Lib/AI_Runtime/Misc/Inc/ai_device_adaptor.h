@@ -2,12 +2,12 @@
 /**
  ******************************************************************************
  * @file    ai_device_adaptor.h
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Device port functions for DEVICE AI test application
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -26,6 +26,7 @@
  *  - v1.0: initial version
  *  - v1.1: rework/clean port functions
  *  - v1.2: New Stellar SDKs support
+ *  - v1.3: New Stellar SDKs NPU support
  *
  *
  * ** Core functions/macros
@@ -285,6 +286,96 @@ __STATIC_INLINE bool port_io_read(uint8_t *buff, int count)
 
   return true;
 }
+#elif defined(STM32MP21xxxx)
+
+#define DEVICE_FAMILY "STM32"
+/* --------------------------------------------
+ * STM32MP21xxxx series
+ * --------------------------------------------
+ */
+
+#include <bsp_ai.h>  /* generated STM32 platform file to import the HAL and the UART definition */
+
+#define port_hal_get_hal_version()        HAL_GetHalVersion()
+#define port_hal_get_dev_id()             HAL_GetDEVID()
+#define port_hal_get_rev_id()             HAL_GetREVID()
+
+#define port_hal_get_cpu_freq()           HAL_RCC_GetCA35Freq()
+#define port_hal_get_sys_freq()           HAL_RCC_GetCA35Freq()
+#define port_hal_get_frequency()          port_hal_get_cpu_freq()
+
+#define port_hal_delay(delay_)            HAL_Delay(delay_)
+#define port_hal_get_tick()               HAL_GetTick()
+
+//#define port_get_reload_value()           SysTick->LOAD
+//#define port_get_time_value()             SysTick->VAL
+
+#define HAS_EXTRA_CONF                    0
+
+#define HAS_DWT_CTRL                      0
+#define HAS_PMU_CTRL                      1
+#define HAS_SYS_TICK                      0
+
+#define PERF_DEF_OPTS (1 | 16)
+static void
+enable_cpu_counters(void* data)
+{
+        /* Enable user-mode access to counters. */
+        asm volatile("mcr p15, 0, %0, c9, c14, 0" :: "r"(1));
+        /* Program PMU and enable all counters */
+        asm volatile("mcr p15, 0, %0, c9, c12, 0" :: "r"(PERF_DEF_OPTS));
+        asm volatile("mcr p15, 0, %0, c9, c12, 1" :: "r"(0x8000000f));
+}
+static inline uint32_t
+rdtsc32(void)
+{
+#if defined(__GNUC__) && (defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_8A__))
+        uint32_t r = 0;
+        asm volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(r) );
+        return r;
+#else
+#error Unsupported architecture/compiler!
+#endif
+}
+#define port_dwt_init()                   enable_cpu_counters(NULL)
+#define port_dwt_reset()                  //ARM_PMU_CYCCNT_Reset()
+#define port_dwt_get_cycles()             rdtsc32()
+
+extern UART_HandleTypeDef UartHandle;
+
+__STATIC_INLINE bool port_io_get(uint8_t *c, uint32_t timeout)
+{
+  HAL_StatusTypeDef status;
+
+  if (!c)
+    return false;
+
+  status = HAL_UART_Receive(&UartHandle, (uint8_t *)c, 1, timeout);
+
+  if (status == HAL_TIMEOUT)
+    return false;
+
+  return (status == HAL_OK);
+}
+
+__STATIC_INLINE bool port_io_write(uint8_t *buff, int count)
+{
+  HAL_StatusTypeDef status;
+
+  status = HAL_UART_Transmit(&UartHandle, buff, count, HAL_MAX_DELAY);
+
+  return (status == HAL_OK);
+}
+
+__STATIC_INLINE bool port_io_read(uint8_t *buff, int count)
+{
+  HAL_StatusTypeDef status;
+
+  status = HAL_UART_Receive(&UartHandle, buff, count, HAL_MAX_DELAY);
+
+  return (status == HAL_OK);
+}
+
 
 #elif defined(STM32N657xx) || defined(STM32N6)
 
@@ -425,6 +516,84 @@ __STATIC_INLINE bool port_io_read(uint8_t *buff, int count)
   return (status == HAL_OK);
 }
 
+#elif defined(STM32A98)
+
+#define DEVICE_FAMILY "STM32A"
+
+/* --------------------------------------------
+ * STM32A98x line (Cube 2 drivers)
+ * --------------------------------------------
+ */
+
+#include "stm32_hal.h"
+#define port_hal_get_hal_version()        HAL_GetVersion()
+#define port_hal_get_dev_id()             0x3198
+#define port_hal_get_rev_id()             0
+
+#if ((__CORTEX_M) == (85U))
+#define port_hal_get_cpu_freq()           HAL_RCC_GetSYSCLKFreq(HAL_RCC_SYSCLK_1)
+#define port_hal_get_sys_freq()           HAL_RCC_GetSYSCLKFreq(HAL_RCC_SYSCLK_1)
+#elif ((__CORTEX_M) == (55U))
+#define port_hal_get_cpu_freq()           HAL_RCC_GetSYSCLKFreq(HAL_RCC_SYSCLK_2)
+#define port_hal_get_sys_freq()           HAL_RCC_GetSYSCLKFreq(HAL_RCC_SYSCLK_2)
+#else
+#error "For stedgeai validation only STM32A98 CORTEX M85/M55 can be used"
+#endif
+
+#define port_hal_get_frequency()          port_hal_get_cpu_freq()
+
+#define port_hal_delay(delay_)            HAL_Delay(delay_)
+#define port_hal_get_tick()               HAL_GetTick()
+
+#define port_get_reload_value()           SysTick->LOAD
+#define port_get_time_value()             SysTick->VAL
+
+#define HAS_EXTRA_CONF                    4
+
+#define HAS_DWT_CTRL                      1
+#define HAS_PMU_CTRL                      0
+#define HAS_SYS_TICK                      1
+
+#define port_dwt_init()                   port_dwt_init_imp()
+#define port_dwt_reset()                  (DWT->CYCCNT = 0)
+#define port_dwt_get_cycles()             (DWT->CYCCNT)
+
+extern hal_lin_handle_t UartHandle;
+
+__STATIC_INLINE bool port_io_get(uint8_t *c, uint32_t timeout)
+{
+  hal_status_t status;
+
+  if (!c)
+    return false;
+
+  status = HAL_LIN_UART_Transmit(&UartHandle, (uint8_t *)c, 1, timeout);
+  
+
+  if (status == HAL_TIMEOUT)
+    return false;
+
+  return (status == HAL_OK);
+}
+
+__STATIC_INLINE bool port_io_write(uint8_t *buff, int count)
+{
+  hal_status_t status;
+  
+  status = HAL_LIN_UART_Transmit(&UartHandle, buff, count, HAL_MAX_DELAY);
+  
+  return (status == HAL_OK);
+}
+
+__STATIC_INLINE bool port_io_read(uint8_t *buff, int count)
+{
+  hal_status_t status;
+  
+  status = HAL_LIN_UART_Receive(&UartHandle, buff, count, HAL_MAX_DELAY);
+  
+  return (status == HAL_OK);
+}
+
 #elif defined(SR5E1)
 
 /* --------------------------------------------
@@ -528,15 +697,45 @@ extern AGTDriver AgtHandle;
 #define port_get_reload_value()           (osal_get_alarm()*1000UL)
 #define port_get_time_value()             agt_get_time_value(&AgtHandle)
 
+#if !defined(SR6X_WITH_NPU)
 #define USE_RETARGET_IO_FROM_TOOL         1
 #define USE_PRINTF_FROM_TOOL              1
-#define HAS_DEDICATED_PRINT_PORT          1
+//#define HAS_DEDICATED_PRINT_PORT          1
+#else
+#include "stdarg.h"
+#define USE_RETARGET_IO_FROM_TOOL         1
+#define USE_PRINTF_FROM_TOOL              1
+#endif
 
 #define HAS_DWT_CTRL                      0
 #define HAS_PMU_CTRL                      0
 #define HAS_SYS_TICK                      1
 
 #define NO_PORT_DWT_INIT_IMP              1  /* specific function is used, provided by the OSAL */
+
+#define HAS_EXTRA_CONF                    4
+#define port_hal_get_npu_freq()           0
+
+#if defined(SR6X_WITH_NPU)
+/* Undef wfe to use properly the Performance Monitor Unit */
+#ifdef __WFE
+#undef __WFE
+#if defined(__GNUC__) && !defined(__ICCARM__)
+#define __WFE()                           __asm volatile ("nop")
+#else
+#define __WFE()                           __asm("nop")
+#endif
+#endif
+#undef port_hal_get_npu_freq
+#define port_hal_get_npu_freq()           SR6X_GetNpuClockFreq()
+#include "pmu_config.h"
+#undef port_hal_get_frequency
+#define port_hal_get_frequency()          port_hal_get_cpu_freq()
+/* Performance Monitor Unit usage for NPU inference time */
+#define port_dwt_init()                   Pmu_counterInit()
+#define port_dwt_reset()                  Pmu_counterReset()
+#define port_dwt_get_cycles()             Pmu_counterGet()
+#endif
 
 #undef port_io_init
 #define port_io_init()                    SR6X_UART_Init()
@@ -660,8 +859,6 @@ __STATIC_INLINE bool port_io_read(uint8_t *buff, int count)
 
 void port_dwt_init_imp(void);
 void port_hal_set_extra_conf(uint32_t *extra);
-void port_dwt_reset_imp();
-uint32_t port_dwt_get_ticks_imp();
 
 /* -----------------------------------------------------------------------------
  * Set LC_PRINT(.) definition

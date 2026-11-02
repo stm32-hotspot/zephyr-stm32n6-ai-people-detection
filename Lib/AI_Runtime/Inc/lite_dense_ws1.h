@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_dense_ws1.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite dense kernel datatypes (1bit weights)
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
+  * Copyright (c) 2022 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

@@ -3,12 +3,12 @@
 /**
   ******************************************************************************
   * @file    ai_math_helpers.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   Math helpers routines header file.
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2017 STMicroelectronics.
+  * Copyright (c) 2017 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -23,7 +23,15 @@
 #define _AI_CONV_2D_LOOP_UNROLLING_OPTIM
 //#endif
 
+#if defined(ARM_MATH_NEON) && defined(STM32_NEON_OPTIMS)
+#define STM32_DOT_SPECIFIC_OPTIM
+/* NEON opitmization */
+#elif defined(ARM_MATH_HELIUM) || defined(AI_ST_MVE_USAGE)
+/* MVE opitmization */
+#define STM32_DOT_SPECIFIC_OPTIM
+#else
 #define STM32_DOT_INLINE_OPTIM
+#endif
 
 /* Modes for element wise integer optimized implementation */
 #define AI_ELTWISE_NO_SCALAR    (0)
@@ -46,7 +54,7 @@ void __ai_math_dot_array(
 {
   ai_register ai_float sum = 0.0f;   /* Temporary result storage */
 
-  /* Run the below code for Cortex-M4 and Cortex-M3 */
+  /* Run the below code when unrolling is enabled */
 
 #if defined(_AI_CONV_2D_LOOP_UNROLLING_OPTIM)
   /* First part of the processing with loop unrolling.  Compute 16 outputs at a time.
@@ -116,7 +124,56 @@ void __ai_math_dot_array(
   /* Directly accumulate the result back in the destination buffer */
   *out += sum;
 }
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+AI_DECLARE_STATIC
+void __ai_math_dot_array_f16(
+        ai_f16* out,
+        const ai_f16* data0,
+        const ai_f16* data1,
+        ai_size data_size)
+{
+  ai_register ai_f16 sum = FLOAT16(0.0);   /* Temporary result storage */
 
+
+#if defined(_AI_CONV_2D_LOOP_UNROLLING_OPTIM)
+  /* First part of the processing with loop unrolling.  Compute 16 outputs at a time.
+   ** a second loop below computes the remaining 1 to 15 samples. */
+  while (data_size >= 8u) {
+    ai_register ai_vec8_f16 ch_in_f = AI_VEC8_F16(data1);
+    ai_register ai_vec8_f16 weights_in_f = AI_VEC8_F16(data0);
+    sum += weights_in_f.a1 * ch_in_f.a1;
+    sum += weights_in_f.a2 * ch_in_f.a2;
+    sum += weights_in_f.a3 * ch_in_f.a3;
+    sum += weights_in_f.a4 * ch_in_f.a4;
+    sum += weights_in_f.a5 * ch_in_f.a5;
+    sum += weights_in_f.a6 * ch_in_f.a6;
+    sum += weights_in_f.a7 * ch_in_f.a7;
+    sum += weights_in_f.a8 * ch_in_f.a8;
+    data1 += 8;
+    data0 += 8;
+    data_size -= 8u;
+  }
+#endif
+  while (data_size > 0u) {
+    /* C = A[0]* B[0] + A[1]* B[1] + A[2]* B[2] + .....+ A[blockSize-1]* B[blockSize-1] */
+    /* Calculate dot product and then store the result in a temporary buffer. */
+    sum += (*data0++) * (*data1++);
+
+    /* Decrement the loop counter */
+    data_size--;
+  }
+
+  /* Directly accumulate the result back in the destination buffer */
+  *out += sum;
+}
+#endif /* AI_FLOAT16_TYPE_SUPPORTED */
+
+
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+#undef AI_MATH_DOT_ARRAY_F16
+#define AI_MATH_DOT_ARRAY_F16(dst, src0, src1, size) \
+  { __ai_math_dot_array_f16(dst, src0, src1, size); }
+#endif
 
 #undef AI_MATH_DOT_ARRAY
 #define AI_MATH_DOT_ARRAY(dst, src0, src1, size) \
@@ -127,6 +184,12 @@ void __ai_math_dot_array(
 #undef AI_MATH_DOT_ARRAY
 #define AI_MATH_DOT_ARRAY(dst, src0, src1, size) \
   { ai_math_dot_array(dst, src0, src1, size); }
+
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+#undef AI_MATH_DOT_ARRAY_F16
+#define AI_MATH_DOT_ARRAY_F16(dst, src0, src1, size) \
+  { ai_math_dot_array_f16(dst, src0, src1, size); }
+#endif /* AI_FLOAT16_TYPE_SUPPORTED */
 
 #endif
 
@@ -156,6 +219,36 @@ void ai_math_dot_array(
         const ai_float* data0,
         const ai_float* data1,
         const ai_size data_size);
+
+/*!
+ * @brief platform optimized dot product of float16 vectors
+ *
+ * Computes the dot product between vectors and adds the result to out.
+ * @ingroup math_helpers
+ * @param out scalar result of the dot product
+ * @param data0 the first float16 vector
+ * @param data1 the second float16 vector
+ * @param data_size the size of both vectors
+ */
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+AI_INTERFACE_ENTRY
+void ai_math_dot_array_f16(
+        ai_f16* out,
+        const ai_f16* data0,
+        const ai_f16* data1,
+        const ai_size data_size);
+
+AI_INTERFACE_ENTRY
+void ai_math_dot_3_arrays_f16(
+  ai_f16* out0,
+  ai_f16* out1,
+  ai_f16* out2,
+  const ai_f16* data0,
+  const ai_f16* data1,
+  const ai_f16* data2,
+  const ai_f16* data,
+  const ai_size data_size);
+#endif /* AI_FLOAT16_TYPE_SUPPORTED */
 /*!
  * @brief ErfInv a float value
  * @ingroup math_helpers

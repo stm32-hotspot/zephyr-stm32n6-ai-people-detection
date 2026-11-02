@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    stai_events.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   Definitions of ST.AI registered events
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2023 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

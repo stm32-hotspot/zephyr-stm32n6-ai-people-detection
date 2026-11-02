@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2017 STMicroelectronics.
+  * Copyright (c) 2017 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -36,7 +36,6 @@
 #include "layers_ml.h"
 #include "layers_ml_iforest.h"
 #include "layers_ml_svc.h"
-#include "layers_ml.h"
 #include "layers_ml_linearclassifier.h"
 #include "layers_ml_treeensembleclassifier.h"
 #include "layers_ml_treeensembleregressor.h"
@@ -56,7 +55,14 @@
 #include "layers_loss_softmax_crossentropy.h"
 #include "layers_loss_softmax_crossentropy_grad.h"
 #include "layers_in_place_accumulator.h"
+#include "layers_concat_split_training.h"
 #include "layers_relu_grad.h"
+#include "layers_leaky_relu_grad.h"
+#include "layers_tanh_grad.h"
+#include "layers_sigmoid_grad.h"
+#include "layers_max_pool_grad.h"
+#include "layers_avg_pool_grad.h"
+#include "layers_conv2d_odl.h"
 
 AI_API_DECLARE_BEGIN
 

@@ -1,12 +1,12 @@
 /**
 ******************************************************************************
 * @file    ai_wrapper_ATON.c
-* @author  GPM/AIS Application Team
+* @author  STMicroelectronics
 * @brief   AI Atonn wrapper
 ******************************************************************************
 * @attention
 *
-* Copyright (c) 2023,2024,2025 STMicroelectronics.
+* Copyright (c) 2023 - 2026 STMicroelectronics.
 * All rights reserved.
 *
 * This software is licensed under terms that can be found in the LICENSE file
@@ -41,8 +41,9 @@
 
 #include "ll_aton_rt_user_api.h"
 
-
+#if ( defined(STM32N657xx) || defined(STM32N6) ) || ( defined(STM32H7P5xx) || defined(STM32H7P) )
 #include "app_config.h"
+#endif
 
 #include "aiTestUtility.h"
 
@@ -164,13 +165,13 @@ static uintptr_t get_exec_ram_addr(ll_aton_reloc_info *rt,
                                    bool xip_mode, bool ext_exec_mode,
                                    bool no_overlay)
 {
-  static uintptr_t next_exec_ram_addr = NULL;
+  static uintptr_t next_exec_ram_addr = (uintptr_t)NULL;
   static uint32_t  next_exec_ram_size = 0;
 
   uintptr_t _cur_exec_ram_addr;
   uint32_t obj_sz = xip_mode?rt->rt_ram_xip:rt->rt_ram_copy;
   
-  if (next_exec_ram_addr == NULL)
+  if (next_exec_ram_addr == (uintptr_t)NULL)
    {
      next_exec_ram_addr = ext_exec_mode?_RELOC_EXT_EXEC_RAM_ADDR:_RELOC_INT_EXEC_RAM_ADDR;
      next_exec_ram_size = ext_exec_mode?_RELOC_EXT_MAX_EXEC_RAM_SZ:_RELOC_INT_MAX_EXEC_RAM_SZ;
@@ -222,7 +223,7 @@ static NN_Instance_TypeDef* _get_nn_instance(int idx, struct npu_instance *insta
 
   int res;
   uintptr_t rom_addr = (uintptr_t)_RELOC_BASE_ADDR_1;
-  uintptr_t ext_param_addr = NULL;
+  uintptr_t ext_param_addr = (uintptr_t)NULL;
   uintptr_t rom_param_addr = (uintptr_t)_RELOC_BASE_PARAMS_ADDR_0;
   bool xip_mode = false;
   bool exec_ext_mode = false;
@@ -263,6 +264,9 @@ static NN_Instance_TypeDef* _get_nn_instance(int idx, struct npu_instance *insta
 
   // Retrieve the info from the binary objects. Requested RAM size,...
   res = ll_aton_reloc_get_info(rom_addr, &rt);
+
+  if ((rt.params_off == 0) && (rt.params_sz == 0) && (rom_param_addr == 0))
+    rom_param_addr = rom_addr;  // Trik to manage a model w/o weights/params
 
   if (rt.params_off == 0)
     ext_param_addr = rom_param_addr; // _RELOC_BASE_PARAMS_ADDR_0;
@@ -649,8 +653,8 @@ static void _npu_counters_PRE_START(struct _npu_exec_context *ctx,
                                     const LL_ATON_RT_EpochBlockItem_t *epoch_block)
 {
 
+  uint32_t rw_count = 0;
   /* Set/check the supported config for the counters */
-
   ctx->cur_epoch.counter_fmt = 0;
 
   if ((ctx->mode & COUNTER_OPT_EPOCH_LEN) && (!(ctx->mode & COUNTER_OPT_BUSIF_RW_DATA))) // EPOCH_LEN only
@@ -699,7 +703,7 @@ static void _npu_counters_PRE_START(struct _npu_exec_context *ctx,
 
   if (ctx->cur_epoch.counter_fmt & COUNTER_FMT_OPT(COUNTER_OPT_BUSIF_RW_DATA))
   {
-    LL_Dbgtrc_BurstLenBenchStart(0);
+    LL_Dbgtrc_BurstLenBenchStart(0, rw_count);
     g_npu_exec_ctx.cur_epoch.counter_fmt |= NPU_MAX_COUNTERS;
   }
 
@@ -888,6 +892,10 @@ static void _epoch_callback(LL_ATON_RT_Callbacktype_t ctype,
     if (g_npu_exec_ctx.user_cb != NULL) {
       g_npu_exec_ctx.user_cb(ctype, g_npu_exec_ctx.exec_epoch_idx - 1, epoch_block, &g_npu_exec_ctx.cur_epoch);
     }
+  }
+  else if ((ctype == LL_ATON_RT_Callbacktype_NN_DeInit) || (ctype == LL_ATON_RT_Callbacktype_NN_Init))
+  {
+    return;
   };
 
   port_dwt_reset();
@@ -1162,13 +1170,13 @@ int npu_run(struct npu_instance *instance, struct npu_counters *counters)
   }
 
   /* --   LL_ATON_RT_Main(); -- */
-
+  
+  _prepare_input_buffers(instance);
+  
   uint32_t tick = port_hal_get_tick();
   g_npu_exec_ctx.cpu_cycles_all = 0;
   port_dwt_reset();
-
-  _prepare_input_buffers(instance);
-
+  
   LL_ATON_RT_Reset_Network(instance->impl);
 
   // Set bus interface keys -- used for encrypted inference only
@@ -1187,10 +1195,10 @@ int npu_run(struct npu_instance *instance, struct npu_counters *counters)
     }
   } while (ll_aton_rt_ret != LL_ATON_RT_DONE);
 
-  _prepare_output_buffers(instance);
-
   g_npu_exec_ctx.cpu_cycles_all += port_dwt_get_cycles();
   tick = port_hal_get_tick() - tick;
+
+  _prepare_output_buffers(instance);
 
   /* --   LL_ATON_RT_Main(); -- */
 

@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_conv2d_dqnn.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite dqnn conv kernel datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2021 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

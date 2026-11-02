@@ -1,13 +1,13 @@
 /**
  ******************************************************************************
  * @file    ll_aton_runtime.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   ATON LL runtime.
  * @note    ATON LL runtime currently assumes a single network run
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2021-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -41,24 +41,42 @@
 /*** ATON RT Variables ***/
 
 /* Check if current runtime is prepared for underlying ATON IP instance */
-#if !defined(ATON_INTCTRL_INTS) || !defined(ATON_STRENG_NUM)
-#error macros `ATON_INTCTRL_INTS` & `ATON_STRENG_NUM` MUST be defined but at least one is not!
-#else // `ATON_INTCTRL_INTS` and `ATON_STRENG_NUM` are defined
+#if !defined(ATON_INTCTRL_NUM) || (ATON_INTCTRL_NUM != 1)
+#error either number of interrupt controllers is not defined or not equal to 1!
+#endif // !defined(ATON_INTCTRL_NUM) || (ATON_INTCTRL_NUM != 1>)
 
-#if (ATON_INTCTRL_INTS(0) > 64) || ((ATON_STRENG_NUM + ATON_STRENG_INT(0)) > 32)
+#if !defined(ATON_INTCTRL_INTS) || (!defined(ATON_STRENG_NUM) && !defined(ATON_STRENG64_NUM))
+
+#error macros `ATON_INTCTRL_INTS` & (`ATON_STRENG_NUM` or `ATON_STRENG64_NUM`) MUST be defined but are not!
+
+#else // !(!defined(ATON_INTCTRL_INTS) || (!defined(ATON_STRENG_NUM) && !defined(ATON_STRENG64_NUM)))
+
+/* Check if streaming engines completion interrupts fit in the first 32 bits of the interrupt controllers interrupt pins
+ * (see also `ll_aton_runtime.h`, line #128) */
+// make compiler happy
+#ifndef ATON_STRENG64_VC0_INT
+#define ATON_STRENG64_VC0_INT(x) (x)
+#endif // ATON_STRENG64_VC0_INT
+
+#if (ATON_INTCTRL_INTS(0) > 64) || (defined(ATON_STRENG_NUM) && ((ATON_STRENG_NUM + ATON_STRENG_INT(0)) > 32)) ||      \
+    (defined(ATON_STRENG64_NUM) &&                                                                                     \
+     (((ATON_STRENG64_NUM * ATON_STRENG64_VC_MAX) + ATON_STRENG64_VC0_INT(0)) >                                        \
+      32)) // TODO: substitute `(ATON_STRENG64_NUM * ATON_STRENG64_VC_MAX)` with dedicated macro once available!
 #error current ATON runtime supports only up to 64 ATON interrupts and up to 32 streaming engines (with IRQ numbers lower than 32)!
-#endif // (ATON_INTCTRL_INTS(0) > 64) || ((ATON_STRENG_NUM + ATON_STRENG_INT(0)) > 32)
+#endif // (ATON_INTCTRL_INTS(0) > 64) || ...
+
+#endif // !(!defined(ATON_INTCTRL_INTS) || (!defined(ATON_STRENG_NUM) && !defined(ATON_STRENG64_NUM)))
 
 #if defined(ATON_EPOCHCTRL_NUM) && (ATON_EPOCHCTRL_NUM > 32)
 #error current ATON runtime supports only up to 32 epoch controllers!
 #endif // (ATON_EPOCHCTRL_NUM > 32)
 
-#endif // `ATON_INTCTRL_INTS` and `ATON_STRENG_NUM` are defined
-
-LL_ATON_WEAK void dump_dma_state(void){};
+LL_ATON_WEAK void dump_dma_state(void)
+{
+}
 
 /* Global variable for the current ATON IP owner */
-NN_Instance_TypeDef *volatile __ll_current_aton_ip_owner = NULL;
+const NN_Instance_TypeDef *volatile __ll_current_aton_ip_owner = NULL;
 #ifndef NDEBUG
 /* Current wait mask set */
 uint32_t volatile __ll_current_wait_mask = 0;
@@ -112,9 +130,8 @@ static inline void __LL_ATON_RT_ExecStartEpochBlock(const LL_ATON_RT_EpochBlockI
     __LL_ATON_RT_Start_AtoNN_Epoch(nn_instance);
   }
 
-  /* Grab ATON IP lock in case not a pure SW or internal epoch */
-  if (EpochBlock_IsEpochPureHW(eb) || // epoch blobs are flagged as pure HW, so checking for epoch blob is not necessary
-      EpochBlock_IsEpochHybrid(eb))
+  /* Grab ATON IP lock in case it's a HW epoch or an epoch blob */
+  if (EpochBlock_IsEpochPureHW(eb)) // epoch blobs are flagged as pure HW, so checking for epoch blob is not necessary
   {
     __ll_set_aton_owner(nn_instance);
   }
@@ -131,7 +148,7 @@ static inline void __LL_ATON_RT_ExecStartEpochBlock(const LL_ATON_RT_EpochBlockI
   else
   { // epoch blob handling based on epoch controller
 #if defined(ATON_EPOCHCTRL_NUM) &&                                                                                     \
-    (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC) // Polling mode is not allowed/supported when using the epoch controller
+    (LL_ATON_RT_MODE != LL_ATON_RT_POLLING) // Polling mode is not allowed/supported when using the epoch controller
     /* reset wait mask(s) in interrupt controller, but ignore stream engine completion event interrupts */
     __LL_ATON_RT_SetWaitMask(ATON_STRENG_INT_MASK(ATON_STRENG_NUM, 0, 0));
 #else // !ATON_EPOCHCTRL_NUM || LL_ATON_RT_POLLING
@@ -154,14 +171,14 @@ static inline void __LL_ATON_RT_ExecStartEpochBlock(const LL_ATON_RT_EpochBlockI
 #if defined(LL_ATON_RT_RELOC)
     if (nn_instance->exec_state.inst_reloc != 0)
     {
-      ai_rel_call_start_end_function(nn_instance->exec_state.inst_reloc, eb->start_epoch_block, (const void *)eb);
+      ai_rel_call_start_end_function(nn_instance->exec_state.inst_reloc, eb->start_epoch_block, eb, nn_instance);
     }
     else
     {
-      eb->start_epoch_block((const void *)eb);
+      eb->start_epoch_block(eb, nn_instance);
     }
 #else
-    eb->start_epoch_block((const void *)eb);
+    eb->start_epoch_block(eb, nn_instance);
 #endif
   }
 
@@ -178,8 +195,11 @@ static inline void __LL_ATON_RT_ExecStartEpochBlock(const LL_ATON_RT_EpochBlockI
 
     LL_EpochCtrl_Init(ecId, &conf);
 
-    if (ATON_EPOCHCTRL_ENCRYPTION_EN(ecId) && EpochBlock_IsBlobEncrypted(eb))
+    if (EpochBlock_IsBlobEncrypted(eb))
     {
+#if defined(ATON_EPOCHCTRL_ENCRYPTION_EN)
+      LL_ATON_ASSERT(ATON_EPOCHCTRL_ENCRYPTION_EN(ecId));
+#endif
 #if defined(LL_ATON_RT_RELOC)
       if (nn_instance->exec_state.inst_reloc != 0)
       {
@@ -196,7 +216,9 @@ static inline void __LL_ATON_RT_ExecStartEpochBlock(const LL_ATON_RT_EpochBlockI
     }
 
     /* start/enable epoch controller */
-    ATON_ENABLE(EPOCHCTRL, ecId);
+    const LL_ATON_EnableUnits_InitTypeDef ec_units[] = {{{EPOCHCTRL, ecId}}};
+    LL_ATON_EnableUnits_Init(ec_units, 1);
+
 #else  // !ATON_EPOCHCTRL_NUM
     LL_ATON_ASSERT(false); // may never happen
 #endif // !ATON_EPOCHCTRL_NUM
@@ -218,11 +240,9 @@ static inline void __LL_ATON_RT_ExecEndEpochBlock(const LL_ATON_RT_EpochBlockIte
     /* stop/disable epoch controller */
     uint32_t ecId = EpochBlock_EpochControllerUnit(eb);
     LL_ATON_ASSERT(ecId < ATON_EPOCHCTRL_NUM); // may never happen
-    uint32_t t;
-    ATON_DISABLE_CLR_CONFCLR(EPOCHCTRL, ecId);
 
-    /* disable epoch controller clock */
-    LL_ATON_DisableClock(ATON_EPOCHCTRL_CLKB_CLK(ecId));
+    const LL_ATON_EnableUnits_InitTypeDef ec_units[] = {{{EPOCHCTRL, ecId}}};
+    LL_ATON_DisableUnits_Init(ec_units, 1);
 #else  // !ATON_EPOCHCTRL_NUM
     LL_ATON_ASSERT(false); // may never happen
 #endif // !ATON_EPOCHCTRL_NUM
@@ -233,33 +253,28 @@ static inline void __LL_ATON_RT_ExecEndEpochBlock(const LL_ATON_RT_EpochBlockIte
 #if defined(LL_ATON_RT_RELOC)
     if (nn_instance->exec_state.inst_reloc != 0)
     {
-      ai_rel_call_start_end_function(nn_instance->exec_state.inst_reloc, eb->end_epoch_block, eb);
+      ai_rel_call_start_end_function(nn_instance->exec_state.inst_reloc, eb->end_epoch_block, eb, nn_instance);
     }
     else
     {
-      eb->end_epoch_block((const void *)eb);
+      eb->end_epoch_block(eb, nn_instance);
     }
 #else
-    eb->end_epoch_block((const void *)eb);
+    eb->end_epoch_block(eb, nn_instance);
 #endif
   }
 
-  /* Reset wait mask */
-  if (EpochBlock_IsEpochPureHW(eb) ||
-      EpochBlock_IsEpochInternal(eb)) // epoch blobs are flagged as pure HW, so checking for epoch blob is not necessary
+  if (EpochBlock_IsEpochPureHW(eb)) // epoch blobs are flagged as pure HW, so checking for epoch blob is not necessary
   {
     LL_ATON_ASSERT(nn_instance == __ll_current_aton_ip_owner);
-    __LL_ATON_RT_SetWaitMask(0);
-  }
 
-  /* Release ATON IP lock in case it's a pure HW epoch */
-  if (EpochBlock_IsEpochPureHW(eb) || ((EpochBlock_IsEpochHybrid(eb) || EpochBlock_IsEpochInternal(eb)) &&
-                                       (nn_instance->exec_state.saved_current_epoch_block == NULL) &&
-                                       (nn_instance->exec_state.next_epoch_block ==
-                                        NULL))) /* hybrid has finished after that last part has been executed in SW */
-  {
+    /* Reset wait mask */
+    __LL_ATON_RT_SetWaitMask(0);
+
+    /* Release ATON IP lock in case it's a pure HW epoch */
     __ll_clear_aton_owner(nn_instance, false);
   }
+
   LL_ATON_ASSERT(EpochBlock_IsEpochInternal(eb) || EpochBlock_IsEpochHybrid(eb) ||
                  (__ll_current_aton_ip_owner != nn_instance));
 
@@ -272,11 +287,11 @@ static inline void __LL_ATON_RT_ExecEndEpochBlock(const LL_ATON_RT_EpochBlockIte
 static void __LL_ATON_RT_DetermineNextEpochBlock(NN_Instance_TypeDef *nn_instance)
 {
   LL_ATON_ASSERT(nn_instance != NULL);
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
   LL_ATON_ASSERT(nn_instance->exec_state.triggered_events ==
                  0x0); // with the removal of parallel SW/HW epochs execution all triggered events must have been
                        // cleared at this point in time!
-#endif                 // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#endif                 // (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 
   /* Determine if there is a new inserted epoch block array */
   if ((nn_instance->exec_state.next_epoch_block != NULL))
@@ -305,7 +320,7 @@ static void __LL_ATON_RT_DetermineNextEpochBlock(NN_Instance_TypeDef *nn_instanc
     nn_instance->exec_state.current_epoch_block++;
   }
 
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
   nn_instance->exec_state.current_epoch_block_started = false;
 #endif
 }
@@ -368,11 +383,14 @@ static inline void __LL_ATON_RT_Init_Network(NN_Instance_TypeDef *nn_instance)
   /* set information about running inference */
   nn_instance->exec_state.inference_started = false;
 
+  /* set default return value */
+  nn_instance->exec_state.last_return_value = LL_ATON_RT_DONE;
+
   /* set asynchronous status variables */
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
   nn_instance->exec_state.triggered_events = 0x0;
   nn_instance->exec_state.current_epoch_block_started = false;
-#endif // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 
   /** Call epoch callback with callback type `LL_ATON_RT_Callbacktype_NN_Init` and network instance **/
   if (nn_instance->exec_state.epoch_callback_function != NULL)
@@ -422,6 +440,32 @@ void LL_ATON_RT_SetNetworkCallback(NN_Instance_TypeDef *nn_instance, TraceEpochB
   LL_ATON_ASSERT(nn_instance != NULL);
   nn_instance->exec_state.epoch_callback_function = epoch_block_callback;
 }
+
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+/**
+ * @brief Register callback for tracing epoch/network related events for `LL_ATON_RT_IRQ_SCHED` mode only
+ * @param nn_instance Pointer to network instance for which to set the callback (may not be `NULL`)
+ * @param callback    Function pointer to callback function (see `LL_ATON_RT_Callbacktype_t`)
+ *
+ * @note The callback function returns a boolean value, which indicates if the inference should be stopped (or
+ * continued). Similar to function `LL_ATON_RT_Reset_Network()`, the return value will only be taken into account, in
+ * case the latest call to `LL_ATON_RT_RunEpochBlock()` returned either `LL_ATON_RT_DONE` or `LL_ATON_RT_NO_WFE`. if the
+ * inference has been stopped, it is up to to user to decide how to continue IRQ scheduling - e.g. pass a message to the
+ * main thread that will then call `LL_ATON_RT_RunEpochBlock()` out of IRQ context - or if to restart an new inference.
+ * The callback function will be called in IRQ context, so it should be as fast as possible and should not perform any
+ * blocking operation (also for this reason `LL_ATON_OSAL_BARE_METAL` is a strict required for `LL_ATON_RT_IRQ_SCHED`
+ * runtime mode). The callback function may use the provided network instance pointer to retrieve information on the
+ * network and execution status.
+ *
+ * @note  This function must only be called while the passed network instance is not executing
+ *        and should be called before `LL_ATON_RT_Init_Network()`!
+ */
+void LL_ATON_RT_SetIrqSchedCallback(NN_Instance_TypeDef *nn_instance, IrqSched_FuncPtr_t callback)
+{
+  LL_ATON_ASSERT(nn_instance != NULL);
+  nn_instance->exec_state.irq_sched_callback_function = callback;
+}
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
 
 /**
  * @brief Initialize a network instance
@@ -507,20 +551,30 @@ void LL_ATON_RT_DeInit_Network(NN_Instance_TypeDef *nn_instance)
   /* intentional do not re-set information about running inference `nn_instance->exec_state.inference_started` */
 
   /* re-set asynchronous status variables */
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
   nn_instance->exec_state.triggered_events = 0x0;
   nn_instance->exec_state.current_epoch_block_started = false;
-#endif // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 }
 
 /**
  * @brief Reset network instance for getting ready for a new inference
- * @param nn_instance Pointer to network instance to initialize
+ * @param nn_instance Pointer to network instance to reset
+ *
+ * returns `true` if reset was possible
+ *         (i.e. in case `LL_ATON_RT_RunEpochBlock()` returned either `LL_ATON_RT_DONE` or `LL_ATON_RT_NO_WFE`),
+ *         otherwise `false` is returned
  */
-void LL_ATON_RT_Reset_Network(NN_Instance_TypeDef *nn_instance)
+bool LL_ATON_RT_Reset_Network(NN_Instance_TypeDef *nn_instance)
 {
-  LL_ATON_RT_DeInit_Network(nn_instance);
-  __LL_ATON_RT_Init_Network(nn_instance);
+  if ((nn_instance != NULL) && ((nn_instance->exec_state.last_return_value == LL_ATON_RT_DONE) ||
+                                (nn_instance->exec_state.last_return_value == LL_ATON_RT_NO_WFE)))
+  {
+    LL_ATON_RT_DeInit_Network(nn_instance);
+    __LL_ATON_RT_Init_Network(nn_instance);
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -533,10 +587,10 @@ void LL_ATON_RT_RuntimeInit(void)
 
   /** Initialize IRQ Context **/
   {
-    uint32_t t;
+    const LL_ATON_EnableUnits_InitTypeDef intc_units[] = {{{INTCTRL, 0}}};
 
     /* Disable & Clear interrupt controller */
-    ATON_DISABLE_CLR_CONFCLR(INTCTRL, 0);
+    LL_ATON_DisableUnits_Init(intc_units, 1);
 
     /* Preset Interrupt Controller masks */
     ATON_INTCTRL_STD_INTORMSK_SET(ATON_STRENG_INT_MASK(
@@ -549,7 +603,7 @@ void LL_ATON_RT_RuntimeInit(void)
 #endif
 
     /* Enable Interrupt Controller (again) */
-    ATON_ENABLE(INTCTRL, 0);
+    LL_ATON_EnableUnits_Init(intc_units, 1);
   }
 
   /** Initialize OSAL layer **/
@@ -643,13 +697,18 @@ LL_ATON_RT_RetValues_t LL_ATON_RT_RunEpochBlock(NN_Instance_TypeDef *nn_instance
     /* ==> here <== */
   }
 
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
   bool this_run_executed_end_epoch = false;
-#endif // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 
   while (true)
   {
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
+
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+    LL_ATON_OSAL_ENTER_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+
     /* wait for current epoch block to finish */
     uint32_t _wait_mask = __LL_ATON_RT_GetWaitMask(nn_instance->exec_state.current_epoch_block);
     if (nn_instance->exec_state.current_epoch_block_started && (_wait_mask != 0))
@@ -659,13 +718,17 @@ LL_ATON_RT_RetValues_t LL_ATON_RT_RunEpochBlock(NN_Instance_TypeDef *nn_instance
         /* Enter critical section */
         LL_ATON_ASSERT(__ll_current_aton_ip_owner ==
                        nn_instance); // when entering a critical section we MUST hold the ATON IP lock
+#if (LL_ATON_RT_MODE != LL_ATON_RT_IRQ_SCHED)
         LL_ATON_OSAL_ENTER_CS();
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_IRQ_SCHED)
 
         /* reset triggered events */
         nn_instance->exec_state.triggered_events &= ~_wait_mask;
 
         /* Exit critical section */
+#if (LL_ATON_RT_MODE != LL_ATON_RT_IRQ_SCHED)
         LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_IRQ_SCHED)
 
         /* end/clean-up epoch block */
         __LL_ATON_RT_ExecEndEpochBlock(nn_instance->exec_state.current_epoch_block, nn_instance);
@@ -677,10 +740,14 @@ LL_ATON_RT_RetValues_t LL_ATON_RT_RunEpochBlock(NN_Instance_TypeDef *nn_instance
       else
       {
         /* Return to main loop */
-        return LL_ATON_RT_WFE;
+        nn_instance->exec_state.last_return_value = LL_ATON_RT_WFE;
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+        LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+        return nn_instance->exec_state.last_return_value;
       }
     }
-#endif // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 
     /* test for last epoch block */
     if (EpochBlock_IsLastEpochBlock(nn_instance->exec_state.current_epoch_block))
@@ -688,27 +755,39 @@ LL_ATON_RT_RetValues_t LL_ATON_RT_RunEpochBlock(NN_Instance_TypeDef *nn_instance
       if (nn_instance->exec_state.saved_current_epoch_block != NULL)
       {
         /* return from inserted epoch block */
-        __LL_ATON_RT_RetFromLibEpochBlockArray(true, nn_instance);
+        __LL_ATON_RT_RetFromLibEpochBlockArray(nn_instance);
 
         /* advance epoch block */
         nn_instance->exec_state.current_epoch_block++;
 
         /* Return to main loop (but do NOT call `LL_ATON_OSAL_WFE())`) */
-        return LL_ATON_RT_NO_WFE;
+        nn_instance->exec_state.last_return_value = LL_ATON_RT_NO_WFE;
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+        LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+        return nn_instance->exec_state.last_return_value;
       }
       else
       {
         /* Reached end of execution */
-        return LL_ATON_RT_DONE;
+        nn_instance->exec_state.last_return_value = LL_ATON_RT_DONE;
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+        LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+        return nn_instance->exec_state.last_return_value;
       }
     }
 
     /* run/start current epoch block */
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
     if (this_run_executed_end_epoch)
     { // allow reset of network (see function `LL_ATON_RT_Reset_Network()`)
       /* Return to main loop (but do NOT call `LL_ATON_OSAL_WFE())`) */
-      return LL_ATON_RT_NO_WFE;
+      nn_instance->exec_state.last_return_value = LL_ATON_RT_NO_WFE;
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+      LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+      return nn_instance->exec_state.last_return_value;
     }
 
     if (!nn_instance->exec_state.current_epoch_block_started)
@@ -729,13 +808,25 @@ LL_ATON_RT_RetValues_t LL_ATON_RT_RunEpochBlock(NN_Instance_TypeDef *nn_instance
       __LL_ATON_RT_DetermineNextEpochBlock(nn_instance);
 
       /* Return to main loop (but do NOT call `LL_ATON_OSAL_WFE())`) */
-      return LL_ATON_RT_NO_WFE;
+      nn_instance->exec_state.last_return_value = LL_ATON_RT_NO_WFE;
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+      LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+      return nn_instance->exec_state.last_return_value;
     }
     else
     {
       /* Return to main loop */
-      return LL_ATON_RT_WFE;
+      nn_instance->exec_state.last_return_value = LL_ATON_RT_WFE;
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+      LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+      return nn_instance->exec_state.last_return_value;
     }
+
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED) // kick-off synchronization
+    LL_ATON_OSAL_EXIT_CS();
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
 
 #else // (LL_ATON_RT_MODE == LL_ATON_RT_POLLING)
 
@@ -767,7 +858,8 @@ LL_ATON_RT_RetValues_t LL_ATON_RT_RunEpochBlock(NN_Instance_TypeDef *nn_instance
     __LL_ATON_RT_DetermineNextEpochBlock(nn_instance);
 
     /* Return to main loop (but do NOT call `LL_ATON_OSAL_WFE())`) */
-    return LL_ATON_RT_NO_WFE;
+    nn_instance->exec_state.last_return_value = LL_ATON_RT_NO_WFE;
+    return nn_instance->exec_state.last_return_value;
 
 #endif // (LL_ATON_RT_MODE == LL_ATON_RT_POLLING)
   }
@@ -888,7 +980,7 @@ static void __LL_ATON_RT_IrqErr(uint32_t irqs)
   // call to `LL_ATON_RT_RunEpochBlock()`
 }
 
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 #if (ATON_INTCTRL_INTS(0) > 32)
 static inline void __LL_ATON_RT_IrqEpochBlock(uint64_t irqs)
 #else  //(ATON_INTCTRL_INTS(0) <= 32)
@@ -933,7 +1025,7 @@ static inline void __LL_ATON_RT_IrqEpochBlock(uint32_t irqs)
         _tmp_triggered_events |= (1 << i);
       }
     }
-    __ll_current_aton_ip_owner->exec_state.triggered_events = _tmp_triggered_events;
+    ((NN_Instance_TypeDef *)__ll_current_aton_ip_owner)->exec_state.triggered_events = _tmp_triggered_events;
   }
 }
 
@@ -955,11 +1047,11 @@ static inline void __LL_ATON_RT_IrqEpochBlob(uint32_t irqs)
     /* Handle RT integration */
     uint32_t _tmp_triggered_events = __ll_current_aton_ip_owner->exec_state.triggered_events;
     _tmp_triggered_events |= (1 << ecId);
-    __ll_current_aton_ip_owner->exec_state.triggered_events = _tmp_triggered_events;
+    ((NN_Instance_TypeDef *)__ll_current_aton_ip_owner)->exec_state.triggered_events = _tmp_triggered_events;
   }
 }
 #endif // ATON_EPOCHCTRL_NUM
-#endif // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 
 /* ATON ISR
  * ll_aton routes all interrupts to `ATON_STD_IRQ_LINE` interrupt line */
@@ -974,7 +1066,7 @@ void ATON_STD_IRQHandler(void)
   uint32_t irqs = ATON_INTCTRL_INTREG_GET(0);
 #endif //(ATON_INTCTRL_INTS(0) <= 32)
 
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
   if (__ll_current_aton_ip_owner != NULL)
   {
     LL_ATON_ASSERT(__ll_current_aton_ip_owner->exec_state.current_epoch_block != NULL);
@@ -1009,7 +1101,7 @@ void ATON_STD_IRQHandler(void)
   __LL_ATON_RT_IrqErr(irqs); /* treat all interrupts as errors */
 #endif // (LL_ATON_RT_MODE == LL_ATON_RT_POLLING)
 
-#if (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
   LL_ATON_ASSERT(__ll_current_aton_ip_owner != NULL);
 
   if (!EpochBlock_IsEpochBlob(__ll_current_aton_ip_owner->exec_state.current_epoch_block))
@@ -1042,10 +1134,39 @@ void ATON_STD_IRQHandler(void)
   /* Data Synchronization Barrier */
   LL_ATON_DSB();
 
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+  LL_ATON_RT_RetValues_t ll_aton_rt_ret = LL_ATON_RT_NO_WFE;
+  NN_Instance_TypeDef *nn_instance = (NN_Instance_TypeDef *)__ll_current_aton_ip_owner;
+  bool stop = false;
+  if (nn_instance->exec_state.irq_sched_callback_function != NULL)
+  {
+    stop =
+        nn_instance->exec_state.irq_sched_callback_function(LL_ATON_RT_IrqSchedCallbacktype_PRE_RunEpoch, nn_instance);
+    stop &= ((ll_aton_rt_ret == LL_ATON_RT_DONE) || (ll_aton_rt_ret == LL_ATON_RT_NO_WFE));
+    if (ll_aton_rt_ret == LL_ATON_RT_DONE)
+    {
+      stop = true;
+    }
+  }
+
+  while (!stop)
+  {
+    ll_aton_rt_ret = LL_ATON_RT_RunEpochBlock(nn_instance);
+    if (nn_instance->exec_state.irq_sched_callback_function != NULL)
+    {
+      stop = nn_instance->exec_state.irq_sched_callback_function(LL_ATON_RT_IrqSchedCallbacktype_POST_RunEpoch,
+                                                                 nn_instance);
+    }
+    if (ll_aton_rt_ret == LL_ATON_RT_DONE || ll_aton_rt_ret == LL_ATON_RT_WFE)
+    {
+      stop = true;
+    }
+  }
+#else  // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
   /* Signal event */
   LL_ATON_OSAL_SIGNAL_EVENT();
-
 #endif // (LL_ATON_RT_MODE == LL_ATON_RT_ASYNC)
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 
   return;
 }

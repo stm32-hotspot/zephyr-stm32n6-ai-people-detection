@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_config.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file of ATON runtime/library configuration.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2023-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -63,6 +63,8 @@
 #define LL_ATON_PLAT_EC_TRACE    11
 #define LL_ATON_PLAT_STM32H7P    12
 #define LL_ATON_PLAT_SR6P3E      13
+#define LL_ATON_PLAT_SR6P5E      14
+#define LL_ATON_PLAT_STM32A98    15
 
 #define LL_ATON_PLAT_USER_IMPL                                                                                         \
   ((1 << LL_ATON_CONFIG_PLAT_BSIZE) - 1) /* "Backdoor" for platforms not officially supported by our distribution */
@@ -74,16 +76,19 @@
 #define LL_ATON_OSAL_THREADX    4
 #define LL_ATON_OSAL_FREERTOS   5
 #define LL_ATON_OSAL_ZEPHYR     6
+#define LL_ATON_OSAL_SR6X_SDK   7
 
 #define LL_ATON_OSAL_USER_IMPL                                                                                         \
   ((1 << LL_ATON_CONFIG_OSAL_BSIZE) -                                                                                  \
    1) /* "Backdoor" for OSAL implementations of custom RTOSes not officially supported by our distribution */
 
-/* Definition of the two different modes for ATON runtime */
+/* Definition of the three different modes for ATON runtime */
 /* `LL_ATON_RT_ASYNC` is RECOMMENDED
+ * `LL_ATON_RT_IRQ_SCHED` is only compatible with `LL_ATON_OSAL_BARE_METAL`
  */
-#define LL_ATON_RT_POLLING 1
-#define LL_ATON_RT_ASYNC   2
+#define LL_ATON_RT_POLLING   1
+#define LL_ATON_RT_ASYNC     2
+#define LL_ATON_RT_IRQ_SCHED 3
 
 /* Check definition of LL_ATON_PLATFORM */
 #ifndef LL_ATON_PLATFORM
@@ -98,6 +103,10 @@
 /* Set beyond macro to one of the above three modes */
 #ifndef LL_ATON_RT_MODE
 #define LL_ATON_RT_MODE LL_ATON_RT_ASYNC
+#endif
+
+#if (LL_ATON_OSAL != LL_ATON_OSAL_BARE_METAL) && (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+#error "LL_ATON_RT_IRQ_SCHED mode is compatible only with LL_ATON_OSAL_BARE_METAL OSAL!"
 #endif
 
 /* Default values for the other remaining optional macros */
@@ -138,8 +147,12 @@
 #if (LL_ATON_PLATFORM != LL_ATON_PLAT_EC_TRACE)
 #if (LL_ATON_PLATFORM != LL_ATON_PLAT_STM32H7P)
 #if (LL_ATON_PLATFORM != LL_ATON_PLAT_SR6P3E)
+#if (LL_ATON_PLATFORM != LL_ATON_PLAT_SR6P5E)
+#if (LL_ATON_PLATFORM != LL_ATON_PLAT_STM32A98)
 #if (LL_ATON_PLATFORM != LL_ATON_PLAT_USER_IMPL)
 #error "Wrong definition of `LL_ATON_PLATFORM`"
+#endif
+#endif
 #endif
 #endif
 #endif
@@ -161,8 +174,10 @@
 #if (LL_ATON_OSAL != LL_ATON_OSAL_THREADX)
 #if (LL_ATON_OSAL != LL_ATON_OSAL_FREERTOS)
 #if (LL_ATON_OSAL != LL_ATON_OSAL_ZEPHYR)
+#if (LL_ATON_OSAL != LL_ATON_OSAL_SR6X_SDK)
 #if (LL_ATON_OSAL != LL_ATON_OSAL_USER_IMPL)
 #error "Wrong definition of `LL_ATON_OSAL`"
+#endif
 #endif
 #endif
 #endif
@@ -173,7 +188,9 @@
 
 #if (LL_ATON_RT_MODE != LL_ATON_RT_POLLING)
 #if (LL_ATON_RT_MODE != LL_ATON_RT_ASYNC)
+#if (LL_ATON_RT_MODE != LL_ATON_RT_IRQ_SCHED)
 #error "Wrong definition of `LL_ATON_RT_MODE`"
+#endif
 #endif
 #endif
 

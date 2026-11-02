@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    layers_iforest.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform iForest layers datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2021 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

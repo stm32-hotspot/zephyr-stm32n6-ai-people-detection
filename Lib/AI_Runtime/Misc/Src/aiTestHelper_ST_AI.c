@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiTestUtility_ST_AI.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Helper functions for AI test application (ST AI API)
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -82,8 +82,8 @@ static void stai_log_data_type(const stai_format fmt)
   }
 }
 
-
-void stai_log_tensor(const stai_tensor *tensor)
+#if 0
+static void stai_log_tensor(const stai_tensor *tensor)
 {
 
   if (tensor->name)
@@ -112,9 +112,9 @@ void stai_log_tensor(const stai_tensor *tensor)
   }
 
 }
+#endif
 
-
-void stai_log_io_tensor(const stai_tensor *tensor, uintptr_t address)
+static void stai_log_io_tensor(const stai_tensor *tensor, uintptr_t address)
 {
   if (tensor->name)
     LC_PRINT(" name=%s", tensor->name);

@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    layers_norm.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   header file of AI platform normalization layers datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2018 STMicroelectronics.
+  * Copyright (c) 2018 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

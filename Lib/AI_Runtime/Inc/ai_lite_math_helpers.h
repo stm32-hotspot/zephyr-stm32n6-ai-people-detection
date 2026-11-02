@@ -8,7 +8,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
+  * Copyright (c) 2022 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -24,6 +24,21 @@
 #include "ai_platform.h"
 #include "ai_platform_interface.h"
 #include "ai_datatypes_defines.h"
+
+
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+#ifdef AI_FLOAT16_SUPPORTED
+  /* _Float16 available: use ISO TS 18661-3 / C23 'f16' literal suffix.
+   * Produces a compile-time constant without double-precision round-trip. */
+  #define FLOAT16(x) ((_Float16)(x ## f16))
+#else
+  /* __fp16 only (IAR, armcc, GHS, TASKING): 'f16' suffix not available.
+   * Use float ('f') literal to avoid double __fp16 conversion. */
+  #define FLOAT16(x) ((ai_f16)(x ## f))
+#endif
+#define AI_FLOAT16_EPSILON      (FLOAT16(0.000976563))
+#define AI_FLOAT16_NEGATIVE_HALF        (FLOAT16(-0.5) + AI_FLOAT16_EPSILON)
+#endif
 
 #define AI_FLOAT_TOLERANCE      (6.19209290e-5F)  /* Used for small calculation
                                                      noise issues */
@@ -216,6 +231,33 @@ ai_vec4_float _get_vec4_float(const ai_handle fptr)
 {
   return *((const ai_vec4_float*)fptr);
 }
+
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+/*!
+ * @typedef ai_vec8_f16
+ * @ingroup ai_datatypes_internal
+ * @brief 16bit X 8 float (optimization for embedded MCU)
+ */
+typedef struct {
+  ai_f16 a1;
+  ai_f16 a2;
+  ai_f16 a3;
+  ai_f16 a4;
+  ai_f16 a5;
+  ai_f16 a6;
+  ai_f16 a7;
+  ai_f16 a8;
+} ai_vec8_f16;
+
+AI_DECLARE_STATIC
+ai_vec8_f16 _get_vec8_f16(const ai_handle fptr)
+{
+  return *((const ai_vec8_f16*)fptr);
+}
+
+#define AI_VEC8_F16(ptr_) \
+  _get_vec8_f16((ai_handle)(ptr_))
+#endif
 
 /*****************************************************************************/
 typedef struct {

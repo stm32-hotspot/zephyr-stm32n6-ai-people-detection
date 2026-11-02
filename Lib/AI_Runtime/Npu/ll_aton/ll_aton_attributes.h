@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_attributes.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file of ATON library attributes handling.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2023-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -27,6 +27,7 @@
  *      LL_ATON_CONCAT(a, b)
  *      LL_ATON_CONCAT3(a, b, c)
  *      LL_ATON_WEAK
+ *      LL_ATON_DEPRECATED(msg)
  *
  */
 
@@ -76,6 +77,12 @@
 /* Dynamic libraries are not supported by the compiler */
 #define LL_ATON_API_ENTRY  /* LL_ATON_API_ENTRY */
 #define LL_ATON_ALIGNED(x) /* LL_ATON_ALIGNED(x) */
+#endif
+
+#if defined(__GNUC__) && !defined(__ghs__)
+#define LL_ATON_DEPRECATED(msg) __attribute__((deprecated(msg)))
+#else
+#define LL_ATON_DEPRECATED(msg) __attribute__((deprecated))
 #endif
 
 #endif

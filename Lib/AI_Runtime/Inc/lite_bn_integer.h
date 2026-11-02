@@ -1,13 +1,13 @@
 /**
   ******************************************************************************
   * @file    lite_bn_integer.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite integer batch normalization
   *          normalization functions
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2023 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

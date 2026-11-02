@@ -1,13 +1,13 @@
 /**
  ******************************************************************************
  * @file    ll_aton_rt_user_api.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file of ATON LL runtime.
  * @note    User API to Aton Runtime.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2025 STMicroelectronics.
+ * Copyright (c) 2025-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -35,24 +35,15 @@ extern "C"
    * @{
    */
 
-  /**
-   * @brief  Return vales of the central inference run function `LL_ATON_RT_RunEpochBlock()`
-   * @note   See explanations for the different values in the function description
-   */
-  typedef enum LL_ATON_RT_RetValues
-  {
-    LL_ATON_RT_NO_WFE = 0,
-    LL_ATON_RT_WFE,
-    LL_ATON_RT_DONE,
-  } LL_ATON_RT_RetValues_t;
-
   /*
    * NOTE:
    * =====
-   * regarding the type definitions of `LL_ATON_User_IO_Result_t` (i.e. User I/O Return Values),
-   * `LL_ATON_RT_Callbacktype_t` (i.e. Callback Events), `TraceRuntime_FuncPtr_t` (i.e. Runtime Callback Functions),
-   * `TraceEpochBlock_FuncPtr_t` (i.e. Epoch Callback Functions), `NN_Interface_TypeDef` (i.e. Network Interface),
-   * and `NN_Instance_TypeDef` (i.e. Network Instance),
+   * regarding the type definitions of
+   * - `LL_ATON_RT_RetValues_t' (i.e. return vales of the central inference run function `LL_ATON_RT_RunEpochBlock()`),
+   * - `LL_ATON_User_IO_Result_t` (i.e. User I/O Return Values),
+   * - `LL_ATON_RT_Callbacktype_t` (i.e. Callback Events), `TraceRuntime_FuncPtr_t` (i.e. Runtime Callback Functions),
+   * - `TraceEpochBlock_FuncPtr_t` (i.e. Epoch Callback Functions), `NN_Interface_TypeDef` (i.e. Network Interface),
+   * - and `NN_Instance_TypeDef` (i.e. Network Instance),
    * please refer to include file `ll_aton_NN_interface.h`
    */
 
@@ -145,9 +136,21 @@ extern "C"
    * @param epoch_block_callback Function pointer to callback function (set to `NULL` to disable epoch tracing)
    *
    * @note  This function must only be called while the passed network instance is not executing
-   *        and should be called before `LL_ATON_RT_Init_Network()`!
+   *        and should be called BEFORE `LL_ATON_RT_Init_Network()`!
    */
   void LL_ATON_RT_SetNetworkCallback(NN_Instance_TypeDef *nn_instance, TraceEpochBlock_FuncPtr_t epoch_block_callback);
+
+#if (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
+  /**
+   * @brief Register callback for IRQ scheduling related events
+   * @param nn_instance Pointer to network instance for which to set the callback (may not be `NULL`)
+   * @param callback Function pointer to callback function (set to `NULL` to disable IRQ scheduling)
+   *
+   * @note  This function must only be called while the passed network instance is not executing
+   *        and should be called BEFORE `LL_ATON_RT_Init_Network()`!
+   */
+  void LL_ATON_RT_SetIrqSchedCallback(NN_Instance_TypeDef *nn_instance, IrqSched_FuncPtr_t callback);
+#endif // (LL_ATON_RT_MODE == LL_ATON_RT_IRQ_SCHED)
 
   /**
    * @brief Initialise a network instance
@@ -159,10 +162,11 @@ extern "C"
    * @brief Reset network instance for getting ready for a new inference
    * @param nn_instance Pointer to network instance to initialize
    *
-   * @note May only be called in case `LL_ATON_RT_RunEpochBlock()` returned either `LL_ATON_RT_DONE` or
-   *       `LL_ATON_RT_NO_WFE`
+   * @retval returns `true` if reset was possible
+   *         (i.e. in case the latest call to `LL_ATON_RT_RunEpochBlock()` returned either `LL_ATON_RT_DONE`
+   *         or `LL_ATON_RT_NO_WFE`), otherwise `false` is returned.
    */
-  void LL_ATON_RT_Reset_Network(NN_Instance_TypeDef *nn_instance);
+  bool LL_ATON_RT_Reset_Network(NN_Instance_TypeDef *nn_instance);
 
   /**
    * @brief  Checks status of previously started epoch block and
@@ -253,6 +257,22 @@ extern "C"
    * @brief De-initialize the ATON runtime
    */
   void LL_ATON_RT_RuntimeDeInit(void);
+
+  /**
+   * @brief get latest return value of function `LL_ATON_RT_RunEpochBlock()`
+   *
+   # @note  returns `LL_ATON_RT_DONE` in case a NULL pointer is passed
+   */
+  static inline LL_ATON_RT_RetValues_t LL_ATON_Network_LastReturnValue(const NN_Instance_TypeDef *nn_instance);
+
+/**
+ * @brief get epoch number of currently executing epoch
+ *
+ # @note  returns `LL_ATON_INVALID_EPOCH_NR` in case a NULL pointer is passed or network is in an invalid execution
+ state
+ */
+#define LL_ATON_INVALID_EPOCH_NR INT16_MIN
+  static inline int16_t LL_ATON_Network_GetCurrentEpochNumber(const NN_Instance_TypeDef *nn_instance);
 
   /**
    * @}
@@ -413,6 +433,37 @@ extern "C"
                  (nn_instance->network->internal_buffers_info != NULL));
   return nn_instance->network->internal_buffers_info();
 #endif
+  }
+
+  static inline LL_ATON_RT_RetValues_t LL_ATON_Network_LastReturnValue(const NN_Instance_TypeDef *nn_instance)
+  {
+    if (nn_instance == NULL)
+    {
+      return LL_ATON_RT_DONE; // should we introduce a special error value?
+    }
+    else
+    {
+      return nn_instance->exec_state.last_return_value;
+    }
+  }
+
+  static inline int16_t LL_ATON_Network_GetCurrentEpochNumber(const NN_Instance_TypeDef *nn_instance)
+  {
+    if ((nn_instance == NULL) || (nn_instance->exec_state.current_epoch_block == NULL))
+    {
+      return LL_ATON_INVALID_EPOCH_NR;
+    }
+    else
+    {
+      if (nn_instance->exec_state.saved_current_epoch_block != NULL)
+      {
+        return nn_instance->exec_state.saved_current_epoch_block->epoch_num;
+      }
+      else
+      {
+        return nn_instance->exec_state.current_epoch_block->epoch_num;
+      }
+    }
   }
 
   /**

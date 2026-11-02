@@ -12,10 +12,17 @@ Zephyr Computer Vision application demonstrating the deployment of object detect
 
 | Name                          | Version             | Release notes
 |-----                          | -------             | -------------
-| STM32Cube.AI runtime          | 11.0.0              |
+| stedgeai-lib                  | 12.1.0              |
 | lib_vision_models_pp Library  | v0.13.0             | [release notes](Lib/lib_vision_models_pp/lib_vision_models_pp/README.md)
 
 ## Update history
+
+### V2.1.0 / October 2026
+
+- update zephyr-stm32-mw-isp to v0.4.0
+- update zephyr to 4.5.0
+- update stedgeai to 4.1.0
+- improve video_main_setup() and video_aux_setup() implementation
 
 ### V2.0.0 / February 2026
 

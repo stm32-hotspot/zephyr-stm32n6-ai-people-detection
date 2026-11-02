@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    core_convert.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   header file of core utils routines
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2018 STMicroelectronics.
+  * Copyright (c) 2018 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -138,12 +138,48 @@ void node_convert_if32ou16(ai_node *pNode);
 
 
 /*!
+ * @brief Convert unsigned int 16 bit tensor to signed int 16 bit
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_iu16os16(ai_node *pNode);
+
+
+/*!
+ * @brief Convert unsigned int 16 bit tensor to unsigned int 16 bit
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_iu16ou16(ai_node *pNode);
+
+
+/*!
  * @brief Convert signed int 16 bit tensor to unsigned int 16 bit
  * @ingroup core_convert
  * @param[in] pNode in a handler to node (layer or operator)
  */
 AI_INTERNAL_API
 void node_convert_is16ou16(ai_node *pNode);
+
+
+/*!
+ * @brief Convert signed int 16 bit tensor to signed int 16 bit
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_is16os16(ai_node *pNode);
+
+
+/*!
+ * @brief Convert signed int 8 bit tensor to signed int 16 bit
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_is8os16(ai_node *pNode);
 
 
 /*!
@@ -155,5 +191,98 @@ void node_convert_is16ou16(ai_node *pNode);
 AI_INTERNAL_API
 void core_shape_to_stride(ai_stride* out, const ai_shape* in);
 
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+/*!
+ * @brief Convert float tensor to float 16 bit
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_if32of16(ai_node *pNode);
+/*!
+ * @brief Convert float16 tensor to float32
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_if16of32(ai_node *pNode);
+
+/*!
+ * @brief Convert signed int8 tensor to float16
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_is8of16(ai_node *pNode);
+
+/*!
+ * @brief Convert unsigned int8 tensor to float16
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_iu8of16(ai_node *pNode);
+
+/*!
+ * @brief Convert float16 tensor to signed int8
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_if16os8(ai_node *pNode);
+
+/*!
+ * @brief Convert float16 tensor to unsigned int8
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_if16ou8(ai_node *pNode);
+
+/*!
+ * @brief Convert binary tensor to float
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_is1of16(ai_node *pNode);
+
+
+/*!
+ * @brief Convert signed int 16 bit tensor to float
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_is16of16(ai_node *pNode);
+
+
+/*!
+ * @brief Convert unsigned int 16 bit tensor to float
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_iu16of16(ai_node *pNode);
+
+
+/*!
+ * @brief Convert float tensor to signed int 16 bit
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_if16os16(ai_node *pNode);
+
+
+/*!
+ * @brief Convert float tensor to unsigned int 16 bit
+ * @ingroup core_convert
+ * @param[in] pNode in a handler to node (layer or operator)
+ */
+AI_INTERNAL_API
+void node_convert_if16ou16(ai_node *pNode);
+
+#endif /*  AI_FLOAT16_TYPE_SUPPORTED */
 
 #endif    /*CORE_CONVERT_H*/

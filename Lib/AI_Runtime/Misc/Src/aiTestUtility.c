@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiTestUtility.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Utility functions for AI test application
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -32,7 +32,8 @@
  *  - v3.2 - added other stellar devices
  *  - v3.3 - added the stellar sr6p3e device
  *  - v3.4 - New Stellar SDKs support
- *
+ *  - v3.5 - Adding STM32C5 definitions
+ *  - v3.6 - Adding STM32A98 definitions
  */
 
 /*
@@ -84,6 +85,10 @@
 #define USE_USB_CDC_CLASS 0
 #endif
 
+/* With HAL version 2, the READ_BIT is replaced by the STM32_READ_BIT macro */
+#if defined(HAL_VERSION_MAIN) && HAL_VERSION_MAIN == 2UL
+#define READ_BIT(REG, BIT)  STM32_READ_BIT(REG, BIT)
+#endif
 
 /* -----------------------------------------------------------------------------
  * Sanity check
@@ -151,8 +156,8 @@ static bool _ioWriteAllowed = true;
 
 #if defined(UX_INCLUDE_USER_DEFINE_FILE) && defined(UX_STANDALONE)
 
-#include "ux_device_class_cdc_acm.h"
 #include "ux_api.h"
+#include "ux_device_class_cdc_acm.h" 
 extern UX_SLAVE_CLASS_CDC_ACM *cdc_acm;
 
 #else
@@ -474,6 +479,8 @@ struct io_malloc io_malloc;
 
 void* __real_malloc(size_t bytes);
 void __real_free(void *ptr);
+void* __wrap_malloc(size_t bytes);
+void __wrap_free(void *ptr);
 
 void* __wrap_malloc(size_t bytes)
 {
@@ -717,6 +724,10 @@ static const char *devIdToStr(uint16_t dev_id)
 #elif defined(STM32H5)
   case 0x484: str = "STM32H5x"; break;  /* */
   case 0x474: str = "STM32H503"; break;  /* */
+#elif defined(STM32C5)
+  case 0x44E: str = "STM32C55xx/C56xx"; break;  /* see RM0522 - DBGMCU_IDCODE register description */
+  case 0x44F: str = "STM32C53xx/C54xx"; break;  /* see RM0522 - DBGMCU_IDCODE register description */
+  case 0x45A: str = "STM32C59xx/C5Axx"; break;  /* see RM0522 - DBGMCU_IDCODE register description */
 #elif defined(STM32N6)
   case 0x486: str = "STM32N6"; break;  /* */
 #elif defined(CORSTONE_300)
@@ -740,6 +751,10 @@ static const char *devIdToStr(uint16_t dev_id)
   case 0x2663: str = "SR6P3E"; break;  /* see RM0544 */
 #elif defined(STM32V8)
   case 0x499: str = "STM32V8"; break;  /* */
+#elif defined(STM32MP21xxxx)
+  case 0x503: str = "STM32MP21xx"; break;  /* */
+#elif defined(STM32A98)
+  case 0x3198: str = "STM32A98"; break;  /* */
 #endif
   default:    str = "UNKNOWN";
   }
@@ -798,12 +813,15 @@ void getSysConf(struct mcu_conf *conf)
 #define MCONF_L4_F4     (1 << 24)
 #define MCONF_F7        (2 << 24)
 #define MCONF_H7        (3 << 24)  /* Used for SR5E1 device - Cortex-m7 based */
-#define MCONF_U5_L5     (4 << 24)
+#define MCONF_U5_L5     (4 << 24)  /* Used for C5/H5 series */
 #define MCONF_N6        (5 << 24)
 #define MCONF_V8        (6 << 24)
 
 #define MCONF_SR5E1     (3 << 24)  /* Used for SR5E1 device - Cortex-m7 based */
 #define MCONF_SR6X      (6 << 24)  /* Used for SR6X devices - Cortex-r52 based */
+
+#define MCONF_A98_M55   (5 << 24)  /* STM32A98 M55 is like N6 */
+#define MCONF_A98_M85   (6 << 24)  /* STM32A98 M85 is like V8 */
 
 #define MCONF_FPU       (1 << 16)
 
@@ -897,7 +915,7 @@ uint32_t getFlashCacheConf(void)
 
 #endif
 
-#if defined(STM32L5) || defined(STM32U5) || defined(STM32H5)
+#if defined(STM32L5) || defined(STM32U5) || defined(STM32H5) || defined(STM32C5)
   mconf |= MCONF_U5_L5;
   if (READ_BIT(ICACHE->CR, ICACHE_CR_EN))
     mconf |= MCONF_ART_ICACHE;
@@ -905,6 +923,14 @@ uint32_t getFlashCacheConf(void)
 
 #if defined(STM32N6)
   mconf |= MCONF_N6;
+#endif
+
+#if (defined(STM32A98) && ((__CORTEX_M) == (55U)))
+  mconf |= MCONF_A98_M55;
+#endif
+
+#if (defined(STM32A98) && ((__CORTEX_M) == (85U)))
+  mconf |= MCONF_A98_M85;
 #endif
 
 #if (__FPU_PRESENT == 1) && __FPU_USED
@@ -921,8 +947,28 @@ uint32_t getFlashCacheConf(void)
     mconf |= MCONF_CORE_ICACHE;
 #endif
 
+#if (defined(STM32A98) && ((__CORTEX_M) == (55U)))
+  mconf |= MCONF_A98_M55;
+  __I uint32_t ccr = SCB->CCR;
+  if (ccr & SCB_CCR_DC_Msk)
+    mconf |= MCONF_CORE_DCACHE;
+
+  if (ccr & SCB_CCR_IC_Msk)
+    mconf |= MCONF_CORE_ICACHE;
+#endif
+
 #if defined(ARMCM85) || defined(STM32V8)
   mconf |= MCONF_V8;
+  __I uint32_t ccr = SCB->CCR;
+  if (ccr & SCB_CCR_DC_Msk)
+    mconf |= MCONF_CORE_DCACHE;
+
+  if (ccr & SCB_CCR_IC_Msk)
+    mconf |= MCONF_CORE_ICACHE;
+#endif
+
+#if (defined(STM32A98) && ((__CORTEX_M) == (85U)))
+  mconf |= MCONF_A98_M85;
   __I uint32_t ccr = SCB->CCR;
   if (ccr & SCB_CCR_DC_Msk)
     mconf |= MCONF_CORE_DCACHE;
@@ -993,23 +1039,31 @@ void systemSettingLog(void)
   );
 
 #if (__FPU_PRESENT == 1)
-#if !defined(SR6X)
+#if defined(__CORTEX_M)
   LC_PRINT(" Core Arch.   : M%d - %s %s\r\n", __CORTEX_M, "FPU ", ((__FPU_USED) ? "used" : "not used!"));
-#else
+#elif defined(__CORTEX_R)
   LC_PRINT(" Core Arch.   : R%d - %s %s\r\n", __CORTEX_R, "FPU ", ((__FPU_USED) ? "used" : "not used!"));
+#elif defined(__CORTEX_A)
+  LC_PRINT(" Core Arch.   : A%d - %s %s\r\n", __CORTEX_A, "FPU ", ((__FPU_USED) ? "used" : "not used!"));
+#else
+#error "Undefined architecture"
 #endif
 #else
-#if !defined(SR6X)
+#if defined(__CORTEX_M)
   LC_PRINT(" Core Arch.   : M%d - %s\r\n", __CORTEX_M, "no FPU");
-#else
+#elif defined(__CORTEX_R)
   LC_PRINT(" Core Arch.   : R%d - %s\r\n", __CORTEX_R, "no FPU");
+#elif defined(__CORTEX_A)
+  LC_PRINT(" Core Arch.   : R%d - %s\r\n", __CORTEX_A, "no FPU");
+#else
+#error "Undefined architecture"
 #endif
 #endif
 
 #if defined(SR5E1)
   LC_PRINT(" SDK version  : %d.%d.%d\r\n", (int)(port_hal_get_hal_version()&0xFF0000U)>>16U, (int)(port_hal_get_hal_version()&0xFF00U)>>8U, (int)(port_hal_get_hal_version()&0xFFU));
 #elif defined(SR6X)
-  LC_PRINT(" SDK version  : %d.%d.%d\r\n", (int)(port_hal_get_hal_version()&0xFF000000U)>>24U, (int)(port_hal_get_hal_version()&0xFF0000U)>>16U, (int)(port_hal_get_hal_version()&0xFF00U)>>16U);
+  LC_PRINT(" SDK version  : %d.%d.%d\r\n", (int)(port_hal_get_hal_version()&0xFF000000U)>>24U, (int)(port_hal_get_hal_version()&0xFF0000U)>>16U, (int)(port_hal_get_hal_version()&0xFF00U)>>8U);
 #else
   LC_PRINT(" HAL version  : 0x%08x\r\n", (int)port_hal_get_hal_version());
 #endif
@@ -1061,7 +1115,7 @@ void systemSettingLog(void)
       (int)((acr & FLASH_ACR_LATENCY_Msk) >> FLASH_ACR_LATENCY_Pos));
 #endif
 
-#if defined(STM32L5) || defined(STM32U5) || defined(STM32H5)
+#if defined(STM32L5) || defined(STM32U5) || defined(STM32H5) || defined(STM32C5)
   LC_PRINT(" ICACHE       : %s\r\n", bitToStr(READ_BIT(ICACHE->CR, ICACHE_CR_EN)));
 #endif
 
@@ -1086,6 +1140,13 @@ void systemSettingLog(void)
 #endif
 
 #if defined(STM32V8)
+  uint32_t ccr = SCB->CCR;
+  LC_PRINT(" CACHE conf.  : $I/$D=(%s,%s)\r\n",
+      bitToStr(ccr & SCB_CCR_IC_Msk),
+      bitToStr(ccr & SCB_CCR_DC_Msk));
+#endif
+
+#if defined(STM32A98)
   uint32_t ccr = SCB->CCR;
   LC_PRINT(" CACHE conf.  : $I/$D=(%s,%s)\r\n",
       bitToStr(ccr & SCB_CCR_IC_Msk),

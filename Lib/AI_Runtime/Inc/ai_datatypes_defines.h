@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    ai_datatypes_defines.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   Definitions of AI platform private APIs types
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2017 STMicroelectronics.
+  * Copyright (c) 2017 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -60,8 +60,8 @@
   #define AI_PACKED_STRUCT_START        /* AI_PACKED_STRUCT_START */
   #define AI_PACKED_STRUCT_END          /* AI_PACKED_STRUCT_END */
   #define AI_PACKED                     /* AI_PACKED */
-#elif defined(__GNUC__) || defined(__clang__)
-  /* For GCC and clang */
+#elif defined(__GNUC__) || defined(__clang__) || defined(__ghs__)
+  /* For GCC, clang and ghs */
   #define AI_PACKED_STRUCT_START        /* AI_PACKED_STRUCT_START */
   #define AI_PACKED_STRUCT_END          /* AI_PACKED_STRUCT_END */
   #define AI_PACKED                     __attribute__((packed))
@@ -102,6 +102,12 @@
   #define AI_ALIGNED_TYPE(type, x)    type
   #define AI_INTERFACE_ENTRY          /* AI_INTERFACE_ENTRY */
 #elif defined(__GNUC__)
+  #define AI_DECLARE_STATIC           static __inline
+  #define AI_FORCE_INLINE             static __inline
+  #define AI_HINT_INLINE              static __inline
+  #define AI_ALIGNED_TYPE(type, x)    type __attribute__ ((aligned(x)))
+  #define AI_INTERFACE_ENTRY          /* AI_INTERFACE_ENTRY */
+#elif defined(__ghs__)
   #define AI_DECLARE_STATIC           static __inline
   #define AI_FORCE_INLINE             static __inline
   #define AI_HINT_INLINE              static __inline

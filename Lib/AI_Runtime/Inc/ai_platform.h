@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    ai_platform.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   Definitions of AI platform public APIs types
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2017 STMicroelectronics.
+  * Copyright (c) 2017 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -76,6 +76,76 @@
 #define AI_API_DECLARE_END      /* AI_API_DECLARE_END   */
 #define ai_register             register
 #endif
+
+/* Portable __has_builtin() wrapper.
+ * __has_builtin() is a built-in preprocessor operator available in Clang
+ * (all versions) and GCC >= 10. Older GCC versions do not define it; using it
+ * directly in a #if/#elif expression causes a tokenisation error even when
+ * guarded by short-circuit &&, because the preprocessor tokenises the whole
+ * line before evaluating it. */
+#if defined(__clang__) || (defined(__GNUC__) && (__GNUC__ >= 10))
+  #define AI_HAS_BUILTIN(x) __has_builtin(x)
+#else
+  #define AI_HAS_BUILTIN(x) 0
+#endif
+
+/* --- float16 type detection ----------------------------------------------- *
+ * Two macros are defined:
+ *   AI_FLOAT16_TYPE_SUPPORTED  — the ai_float16_t storage type is available
+ *                                (_Float16 or __fp16 depending on toolchain).
+ *   AI_FLOAT16_SUPPORTED       — implies TYPE_SUPPORTED plus native FP16
+ *                                arithmetic (no implicit promotion to float)
+ *                                AND the 'f16' literal suffix is usable.
+ *                                Required for FLOAT16(x) to emit an 'f16'
+ *                                literal instead of a float cast.
+ *
+ * Branch 1 — _Float16 arithmetic type (TYPE_SUPPORTED + possibly SUPPORTED):
+ *   Toolchains: GCC>=7 (AArch32/64), Clang, armclang, starmclang, C23.
+ *   Triggers:   __FLT16_MANT_DIG__ (GCC/Clang), __STDCPP_FLOAT16_T__ (C++23),
+ *               __builtin_inf16 (older Clang), MVE FP16 (__ARM_FEATURE_MVE & 0x2).
+ *   GHS excluded: GHS defines __ARM_FEATURE_MVE on M85 but does NOT support
+ *               _Float16; it uses __fp16 only (see branch 2 below).
+ *   AI_FLOAT16_SUPPORTED is additionally set only when FP16 arithmetic is
+ *   truly native (no promotion). Indicators:
+ *     - __ARM_FEATURE_MVE & 0x2     : ARM MVE with FP16 (Cortex-M55/M85)
+ *     - __ARM_FEATURE_FP16_SCALAR_ARITHMETIC : ARM scalar FP16 (e.g. armv8.2-a+fp16)
+ *     - __AVX512FP16__              : x86 AVX-512 FP16
+ *   On host builds (macOS/Linux x86, plain arm64), _Float16 ops still promote
+ *   to float; __FLT16_MANT_DIG__/__builtin_inf16 alone are not sufficient.
+ *
+ * Branch 2 — __fp16 storage/conversion type (TYPE_SUPPORTED only):
+ *   Toolchains: arm-none-eabi GCC/Clang (-mfp16-format=ieee), IAR, armcc
+ *               (--fp16_format ieee), TASKING, GHS (-half_precision_type).
+ *   No arithmetic operators, no 'f16' literal suffix — AI_FLOAT16_SUPPORTED
+ *   is intentionally NOT set.
+ *   GHS note: __FP16_BIT is the predefined driver macro enabled by
+ *   -half_precision_type. __ARM_FP16_FORMAT_IEEE is NOT defined by GHS.
+ *   HLF_MANT_DIG lives in <float.h> and cannot be used here as a predefined
+ *   macro. Without -half_precision_type, __fp16 is unavailable and this
+ *   branch is correctly skipped.
+ * -------------------------------------------------------------------------- */
+#if !defined(__ghs__) && ( \
+    (defined(__ARM_FEATURE_MVE) && (__ARM_FEATURE_MVE & 0x2)) || \
+    defined(__FLT16_MANT_DIG__)                               || \
+    defined(__STDCPP_FLOAT16_T__)                             || \
+    AI_HAS_BUILTIN(__builtin_inf16))
+  typedef _Float16 ai_float16_t;
+  #define AI_FLOAT16_TYPE_SUPPORTED
+  #if (defined(__ARM_FEATURE_MVE) && (__ARM_FEATURE_MVE & 0x2)) || \
+      defined(__ARM_FEATURE_FP16_SCALAR_ARITHMETIC) || \
+      defined(__AVX512FP16__)
+    #define AI_FLOAT16_SUPPORTED
+  #endif
+
+#elif defined(__ARM_FP16_FORMAT_IEEE) || \
+      (defined(__ghs__) && defined(__FP16_BIT)) || \
+      defined(__ICCARM__)            || \
+      defined(__TASKING__)
+  typedef __fp16 ai_float16_t;
+  #define AI_FLOAT16_TYPE_SUPPORTED
+  /* AI_FLOAT16_SUPPORTED intentionally NOT set */
+
+#endif /* float16 detection */
 
 /*****************************************************************************/
 #define AI_FLAG_NONE            (0x0)
@@ -590,7 +660,14 @@ typedef uint8_t       ai_custom_type_signature;
 typedef void*         ai_handle;
 typedef const void*   ai_handle_const;
 
+
 typedef float         ai_float;
+typedef ai_float      ai_f32;
+
+#ifdef AI_FLOAT16_TYPE_SUPPORTED
+typedef ai_float16_t  ai_f16;
+#endif
+
 typedef double        ai_double;
 
 typedef bool          ai_bool;

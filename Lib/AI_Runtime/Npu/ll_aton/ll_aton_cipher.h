@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_cipher.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file of ATON LL module.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2024-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -26,17 +26,7 @@ extern "C"
 
 #include <stdint.h>
 
-  /**
-   * @brief Encryption configuration structure for Streaming Engines and Epoch Controller units
-   */
-  typedef struct
-  {
-    unsigned int enable;    /**< Enable/disable encryption (0, 1) */
-    uint64_t encryption_id; /**< 43 bit Encryption ID */
-    unsigned int rounds;    /**< Number of encryption rounds: 0->12 rounds, 1->9 rounds */
-    unsigned int key_sel;   /**< Bus Interface encryption key selection (0, 1) */
-    unsigned int increment; /**< Encryption ID increment rate: 0 -> no increment, <n> -> +1 every n frames */
-  } LL_Streng_EncryptionTypedef;
+  struct LL_Streng_EncryptionTypedef;
 
   typedef enum
   {
@@ -77,8 +67,6 @@ extern "C"
 #define CYPHER_DST_STRENG_ID 1       /**< Stream engine used for destination data in Dma/Cypher function */
 #define CYPHER_CACHE_SIZE    0x40000 /**< N6 cache size */
 
-  int LL_Streng_EncryptionInit(int id, const LL_Streng_EncryptionTypedef *);
-  int LL_EpochCtrl_EncryptionInit(int id, const LL_Streng_EncryptionTypedef *conf);
   int LL_DmaCypherInit(LL_Cypher_InitTypeDef *cypherInfo);
 
   /**
@@ -108,7 +96,7 @@ extern "C"
 
   } LL_ExtendedCypher_InitTypeDef;
 
-  void LL_ATON_DecryptAndCopy(const LL_Streng_EncryptionTypedef *encr_params, uint64_t *dst, const uint64_t *src,
+  void LL_ATON_DecryptAndCopy(const struct LL_Streng_EncryptionTypedef *encr_params, uint64_t *dst, const uint64_t *src,
                               uint32_t size);
 
 #ifdef __cplusplus

@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiSystemPerformance_ST_AI.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI system performance application (ST AI embedded c-api)
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in

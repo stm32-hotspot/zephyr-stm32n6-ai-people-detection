@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ec.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file of Epoch Controller Blobs.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2024-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -20,6 +20,7 @@
 #define __EC_H
 
 #include <inttypes.h>
+#include <stdint.h>
 
 /** Magic number of the Epoch Controller binary file. */
 #define ECASM_BINARY_MAGIC 0xECBF0050
@@ -30,11 +31,21 @@
 /** Type containing an Epoch Controller instruction. */
 typedef uint32_t ECInstr;
 
+/** Print format specifier for the type containing an Epoch Controller instruction. */
+#define PRI_ECInstr PRIu32
+
 /** Type containing an address of an Epoch Controller instruction. */
 typedef uint32_t ECAddr;
+
+/** Print format specifier for the type containing an address of an Epoch Controller instruction. */
+#define PRI_ECAddr PRIu32
 
 /** Type used for each entry of the Epoch Controller binary file: magic number, number of elements, file and instruction
  * offsets. */
 typedef uint32_t ECFileEntry;
+
+/** Print format specifier for the type used for each entry of the Epoch Controller binary file: magic number, number of
+ * elements, file and instruction offsets. */
+#define PRI_ECFileEntry PRIu32
 
 #endif // #ifndef __EC_H

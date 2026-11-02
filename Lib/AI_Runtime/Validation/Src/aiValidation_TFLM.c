@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiValidation_TFLM.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI Validation application (entry points) - TFLM runtime
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2021 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -37,6 +37,7 @@
  *  - v4.0 - migration to PB msg interface 3.0
  *           align code with ai_stm32_adpaptor.h file (remove direct call of HAL_xx fcts)
  *  - v4.1 - migration to PB msg interface 3.1
+ *  - v5.0 - alignment with new tfm_c interface 5.0
  */
 
 /* System headers */
@@ -47,6 +48,11 @@
 #include <string.h>
 #include <stdarg.h>
 
+#if !defined(UNUSED)
+#define UNUSED(x) ((void)(x))
+#endif
+
+#define USE_OBSERVER         1
 
 #define USE_CORE_CLOCK_ONLY  0 /* 1: remove usage of the HAL_GetTick() to evaluate the number of CPU clock. Only the Core
                                 *    DWT IP is used. HAL_Tick() is requested to avoid an overflow with the DWT clock counter
@@ -68,7 +74,16 @@
 
 #define _AI_RUNTIME_ID EnumAiRuntime_AI_RT_TFLM
 
+
+#define TFLM_NETWORK_NUMBER_MAX (1)
+
+
+#if defined(USE_OBSERVER) && USE_OBSERVER == 1
+// #define _CAP (void *)(EnumCapability_CAP_OBSERVER | (_AI_RUNTIME_ID << 16))
 #define _CAP (void *)(_AI_RUNTIME_ID << 16)
+#else
+#define _CAP (void *)(_AI_RUNTIME_ID << 16)
+#endif
 
 
 /* -----------------------------------------------------------------------------
@@ -97,7 +112,7 @@ struct tflm_context {
   struct tflm_c_tensor_info  tflite;
   int error;
   bool debug;
-} net_exec_ctx[1] = {0};
+} net_exec_ctx[TFLM_NETWORK_NUMBER_MAX] = {0};
 
 
 #if defined(TFLM_NETWORK_NAME)
@@ -249,7 +264,15 @@ static void send_model_info(const reqMsg *req, respMsg *resp,
 
   aiPbStrCopy(_model_name, &resp->payload.minfo.name[0],
       sizeof(resp->payload.minfo.name));
+
+  /* rtid definition - see rtid field (32b) in stm32msg.proto file.
+   32b: <31 extra(8b) 24> <23 tools(8b) 16> <15 api(8b) 8> <7 rt(8b) 0>
+   */
+
   resp->payload.minfo.rtid = _AI_RUNTIME_ID | ver.tools_id << EnumTools_AI_TOOLS_POS;
+
+  resp->payload.minfo.rtid |= (4 << 24);  /* no macc info */
+
 
   aiPbStrCopy(ver.desc, &resp->payload.minfo.runtime_desc[0],
       sizeof(resp->payload.minfo.runtime_desc));
@@ -384,13 +407,22 @@ static bool send_ai_io_tensor(const reqMsg *req, respMsg *resp,
 #endif
 }
 
+
+/* -----------------------------------------------------------------------------
+ * PB_LC_PRINT/STAT functions
+ * -----------------------------------------------------------------------------
+ */
+
 #if defined(HAS_DEDICATED_PRINT_PORT) && HAS_DEDICATED_PRINT_PORT == 1
 #define PB_LC_PRINT(debug, fmt, ...) LC_PRINT(fmt, ##__VA_ARGS__)
+#define PB_LC_STAT(_cat, _sub_cat, fmt, ...) LC_PRINT("s:" _cat ":" _sub_cat ":" fmt, ##__VA_ARGS__)
 #else
 
-#define _PRINT_BUFFER_SIZE  80
+#define _PRINT_BUFFER_SIZE  256
 
 static char _print_buffer[_PRINT_BUFFER_SIZE];
+
+void _print_debug(bool debug, const char* fmt, ...);
 
 void _print_debug(bool debug, const char* fmt, ...)
 {
@@ -401,17 +433,19 @@ void _print_debug(bool debug, const char* fmt, ...)
     return;
 
   va_start(ap, fmt);
-  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE, fmt, ap);
+  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE - 1, fmt, ap);
   va_end(ap);
-  while (s && s >= 0) {
+  while (s) {
     if ((_print_buffer[s] == '\n') || (_print_buffer[s] == '\r'))
       _print_buffer[s] = 0;
     s--;
   }
+  _print_buffer[_PRINT_BUFFER_SIZE - 1] = 0;
   aiPbMgrSendLogV2(EnumState_S_WAITING, 1, &_print_buffer[0]);
 }
 
-#define PB_LC_PRINT(debug, fmt, ...) _print_debug(debug, fmt, ##__VA_ARGS__)
+#define PB_LC_PRINT(debug, fmt, ...)         _print_debug(debug, fmt, ##__VA_ARGS__)
+#define PB_LC_STAT(_cat, _sub_cat, fmt, ...) _print_debug(true, "s:" _cat ":" _sub_cat ":" fmt "\r\n", ##__VA_ARGS__)
 #endif
 
 
@@ -426,29 +460,29 @@ static uint8_t tensor_arena[TFLM_NETWORK_TENSOR_AREA_SIZE+32];
 
 extern UART_HandleTypeDef UartHandle;
 
-static bool _allow_uart = true;
+static bool _direct_write_uart = true;
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-int tflm_io_write(const void *buff, uint16_t count)
+static void _tfm_c_debug_log_puts(const char* buff)
 {
-  HAL_StatusTypeDef status;
+  size_t count = strlen(buff);
 
-  if (_allow_uart) {
-    status = HAL_UART_Transmit(&UartHandle, (uint8_t *)buff, count, HAL_MAX_DELAY);
+  if ((count == 0) || (count > 256))
+    return;
+
+  if (_direct_write_uart) {
+    HAL_UART_Transmit(&UartHandle, (uint8_t *)buff, count, HAL_MAX_DELAY);
   } else {
     char *pr = (char *)buff;
     if (buff && pr[0] != '\r') {
       pr[count] = 0;
       aiPbMgrSendLogV2(EnumState_S_ERROR, 0, pr);
     }
-    return count;
   }
-
-  return (status == HAL_OK ? count : 0);
 }
 
 #ifdef __cplusplus
@@ -473,11 +507,71 @@ void log_tensor(struct tflm_c_tensor_info* t_info, int idx)
     LC_PRINT("\r\n");
 }
 
-
 /* -----------------------------------------------------------------------------
- * AI-related functions
+ * PER LAYER and call-back support
  * -----------------------------------------------------------------------------
  */
+
+#if defined(USE_OBSERVER) && USE_OBSERVER == 1
+
+static uint64_t _tfm_c_current_time_ticks_cb(int mode)
+{
+  UNUSED(mode);
+  return cyclesCounterEnd();
+}
+
+static int _tflm_c_observer_node_cb(
+  const void* cookie,
+  const uint32_t flags,
+  const struct tflm_c_node* node)
+{
+  struct tflm_context *ctx = (struct tflm_context *)cookie;
+  if (ctx && node) {
+    PB_LC_STAT("node", "end", "%d:%s:%ld:%f:%d:%d:%d",
+        node->node_info.idx,
+        node->node_info.name,
+        node->node_info.dur,
+        (double)dwtCyclesToFloatMs(node->node_info.dur),
+        node->node_info.builtin_code,
+        node->node_info.n_inputs,
+        node->node_info.n_outputs);
+  }
+  return 0;
+}
+
+#endif
+
+/* -----------------------------------------------------------------------------
+ * AI-related functions and execution context
+ * -----------------------------------------------------------------------------
+ */
+
+static struct tflm_context *aiExecCtx(const char *nn_name, int pos)
+{
+  struct tflm_context *cur = NULL;
+
+  if (!nn_name)
+    return NULL;
+
+  if (!nn_name[0]) {
+    if ((pos >= 0) && (pos < TFLM_NETWORK_NUMBER_MAX) && net_exec_ctx[pos].hdl)
+      cur = &net_exec_ctx[pos];
+  } else {
+    int idx;
+    for (idx=0; idx < TFLM_NETWORK_NUMBER_MAX; idx++) {
+      cur = &net_exec_ctx[idx];
+      if (cur->hdl &&
+          (strlen(cur->name) == strlen(nn_name)) &&
+          (strncmp(cur->name, nn_name,
+              strlen(cur->name)) == 0)) {
+        break;
+      }
+      cur = NULL;
+    }
+  }
+  return cur;
+}
+
 
 static int aiBootstrap(struct tflm_context *ctx)
 {
@@ -493,6 +587,10 @@ static int aiBootstrap(struct tflm_context *ctx)
 
   MON_ALLOC_RESET();
   MON_ALLOC_ENABLE();
+
+  ctx->error = 0;
+
+  tfm_c_register_log_cb(_tfm_c_debug_log_puts);
 
   res = tflm_c_create(g_tflm_network_model_data, (uint8_t*)uaddr,
           TFLM_NETWORK_TENSOR_AREA_SIZE, &ctx->hdl);
@@ -605,32 +703,55 @@ void aiPbCmdSysInfo(const reqMsg *req, respMsg *resp, void *param)
 
 void aiPbCmdNNInfo(const reqMsg *req, respMsg *resp, void *param)
 {
+  struct tflm_context *ctx;
   UNUSED(param);
 
-  if (net_exec_ctx[0].hdl && req->param == 0)
-    send_model_info(req, resp, EnumState_S_IDLE, &net_exec_ctx[0]);
+  ctx = aiExecCtx(req->name, req->param);
+
+  if (ctx) {
+    struct mcu_conf conf;
+    getSysConf(&conf);
+    PB_LC_STAT("config", "version", "1.0");
+    PB_LC_STAT("config", "dev_id", "0x%X", conf.devid);
+    PB_LC_STAT("config", "mcu_freq", "%d", conf.sclk);
+    PB_LC_STAT("config", "sys_freq", "%d", conf.hclk);
+
+    send_model_info(req, resp, EnumState_S_IDLE, ctx);
+  }
   else {
-    if (req->param > 0)
+    if (req->param >= TFLM_NETWORK_NUMBER_MAX)
       aiPbMgrSendAck(req, resp, EnumState_S_ERROR,
-                EnumError_E_INVALID_PARAM, EnumError_E_INVALID_PARAM);
+          EnumError_E_INVALID_PARAM, EnumError_E_INVALID_PARAM);
     else
       aiPbMgrSendAck(req, resp, EnumState_S_ERROR,
-          net_exec_ctx[0].error, EnumError_E_GENERIC);
+          ctx->error, EnumError_E_GENERIC);
   }
 }
+
 
 void aiPbCmdNNRun(const reqMsg *req, respMsg *resp, void *param)
 {
   TfLiteStatus tflm_res;
   uint64_t tend;
   bool res;
+  bool cb_is_registered = false;
   UNUSED(param);
+  uint32_t tick;
 
-  struct tflm_context *ctx = &net_exec_ctx[0];
+#if defined(USE_OBSERVER) && USE_OBSERVER == 1
+  struct tflm_c_profile_info profile_info;
+  struct tflm_c_observer_options cb_options = {
+      .notify = &_tflm_c_observer_node_cb,
+      .get_time = &_tfm_c_current_time_ticks_cb,
+      .cookie = NULL,
+      .flags = 0
+  };
+#endif
+
+  struct tflm_context *ctx = aiExecCtx(req->name, req->param);
 
   /* 0 - Check if requested c-name model is available -------------- */
-  if ((ctx->hdl == 0) ||
-      (strncmp(ctx->name, req->name, strlen(ctx->name)) != 0)) {
+  if (ctx == 0) {
     aiPbMgrSendAck(req, resp, EnumState_S_ERROR,
         EnumError_E_INVALID_PARAM, EnumError_E_INVALID_PARAM);
     return;
@@ -654,6 +775,7 @@ void aiPbCmdNNRun(const reqMsg *req, respMsg *resp, void *param)
       EnumError_E_NONE);
 
   /* 2 - Receive all input tensors --------------------------------- */
+  tick = port_hal_get_tick();
   for (uint32_t i = 0; i < ctx->n_inputs; i++) {
     /* upload a buffer */
     EnumState state = EnumState_S_WAITING;
@@ -665,11 +787,32 @@ void aiPbCmdNNRun(const reqMsg *req, respMsg *resp, void *param)
   }
 
   /* 3 - Processing ------------------------------------------------ */
-  PB_LC_PRINT(ctx->debug, "RUN: processing\r\n");
+  tick = port_hal_get_tick() - tick;
+  PB_LC_PRINT(ctx->debug, "RUN: Processing.. (%ld ticks to download %d input(s))\r\n", tick, ctx->n_inputs);
+
+#if defined(USE_OBSERVER) && USE_OBSERVER == 1
+  if (ctx->debug) {
+     cb_options.cookie = ctx;
+     if (tflm_c_observer_register(ctx->hdl, &cb_options) == kTfLiteOk) {
+       cb_is_registered = true;
+       tflm_c_observer_start(ctx->hdl);
+     }
+  }
+#endif
 
   cyclesCounterStart();
   tflm_res = tflm_c_invoke(ctx->hdl);
   tend = cyclesCounterEnd();
+
+#if defined(USE_OBSERVER) && USE_OBSERVER == 1
+  if (ctx->debug && cb_is_registered) {
+    tflm_c_observer_info(ctx->hdl, &profile_info);
+    tflm_c_observer_unregister(ctx->hdl, &cb_options);
+    PB_LC_PRINT(ctx->debug, "RUNN:CB: n_evts=%d, %d, %fms\r\n", profile_info.n_events, profile_info.n_invoks,
+        (double)dwtCyclesToFloatMs(profile_info.node_dur));
+    tend = profile_info.node_dur;
+  }
+#endif
 
   if (tflm_res != kTfLiteOk) {
     aiPbMgrSendAck(req, resp, EnumState_S_ERROR,
@@ -701,6 +844,7 @@ void aiPbCmdNNRun(const reqMsg *req, respMsg *resp, void *param)
 
 static aiPbCmdFunc pbCmdFuncTab[] = {
     AI_PB_CMD_SYNC(_CAP),
+    AI_PB_CMD_DISCONNECT(),
     { EnumCmd_CMD_SYS_INFO, &aiPbCmdSysInfo, NULL },
     { EnumCmd_CMD_NETWORK_INFO, &aiPbCmdNNInfo, NULL },
     { EnumCmd_CMD_NETWORK_RUN, &aiPbCmdNNRun, NULL },
@@ -751,7 +895,7 @@ int aiValidationProcess(void)
         EnumVersion_P_VERSION_MINOR);
   }
 
-  _allow_uart = false;
+  _direct_write_uart = false;
   aiPbMgrInit(pbCmdFuncTab);
 
   do {
@@ -766,4 +910,22 @@ void aiValidationDeInit(void)
   LC_PRINT("\r\n");
   aiDeInit();
   LC_PRINT("bye bye ...\r\n");
+}
+
+#include <stdint.h>
+
+__attribute__((noreturn))
+void __aeabi_assert(const char *expr, const char *file, int line)
+{
+    (void)expr;
+    (void)file;
+    (void)line;
+
+#ifdef DEBUG
+    __asm volatile ("bkpt #0");
+#endif
+
+    for (;;) {
+        __asm volatile ("wfi");
+    }
 }

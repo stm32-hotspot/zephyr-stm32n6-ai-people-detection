@@ -1,13 +1,13 @@
 /**
   ******************************************************************************
   * @file    core_datatypes.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   header file of core module private defines and datatypes
   * to public nor codegen tool
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2018 STMicroelectronics.
+  * Copyright (c) 2018 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -30,10 +30,10 @@
  * @brief platform runtime core library version
  */
 #ifndef AI_PLATFORM_RUNTIME_MAJOR
-#define AI_PLATFORM_RUNTIME_MAJOR    (11)
+#define AI_PLATFORM_RUNTIME_MAJOR    (12)
 #endif
 #ifndef AI_PLATFORM_RUNTIME_MINOR
-#define AI_PLATFORM_RUNTIME_MINOR    (0)
+#define AI_PLATFORM_RUNTIME_MINOR    (1)
 #endif
 #ifndef AI_PLATFORM_RUNTIME_MICRO
 #define AI_PLATFORM_RUNTIME_MICRO    (0)

@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_resize.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite resize kernel datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2023 STMicroelectronics.
+  * Copyright (c) 2023 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file

@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    layers_list.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   header file of AI platform layers datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2018-2024 STMicroelectronics.
+  * Copyright (c) 2018 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -171,6 +171,15 @@ LAYER_ENTRY(SOFTMAXCROSSENTROPYLOSS, LAYER_ID(100), softmaxcrossentropyloss, for
 LAYER_ENTRY(SOFTMAXCROSSENTROPYLOSSGRAD, LAYER_ID(101), softmaxcrossentropylossgrad, backward_softmaxcrossentropylossgrad, NULL, NULL)
 LAYER_ENTRY(INPLACEACCUMULATORV2, LAYER_ID(102), inplaceaccumulatorv2, backward_inplaceaccumulatorv2, NULL, NULL)
 LAYER_ENTRY(RELU_GRAD, LAYER_ID(103), relu_grad, backward_relu, NULL, NULL)
+LAYER_ENTRY(CONV_2D_ODL, LAYER_ID(104), conv_2d_odl, forward_lite_conv2d_odl_if32of32, NULL, NULL)
+LAYER_ENTRY(CONV_2D_GRAD, LAYER_ID(105), conv_2d_grad, backward_lite_conv2d_grad_if32of32, NULL, NULL)
+LAYER_ENTRY(LEAKY_RELU_GRAD, LAYER_ID(106), leaky_relu_grad, backward_leaky_relu, NULL, NULL)
+LAYER_ENTRY(TANH_GRAD, LAYER_ID(107), tanh_grad, backward_tanh, NULL, NULL)
+LAYER_ENTRY(SIGMOID_GRAD, LAYER_ID(108), sigmoid_grad, backward_sigmoid, NULL, NULL)
+LAYER_ENTRY(MAX_POOL_GRAD, LAYER_ID(109), max_pool_grad, backward_max_pool, NULL, NULL)
+LAYER_ENTRY(AVG_POOL_GRAD, LAYER_ID(110), avg_pool_grad, backward_avg_pool, NULL, NULL)
+LAYER_ENTRY(CONCAT_TRAINING, LAYER_ID(111), concat_training, forward_concat_training, NULL, NULL)
+LAYER_ENTRY(SPLIT_TRAINING, LAYER_ID(112), split_training, forward_split_training, NULL, NULL)
 
 #undef LAYER_ENTRY
 #undef LAYER_ID

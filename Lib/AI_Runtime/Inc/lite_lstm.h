@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_lstm.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite lstm kernel
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
+  * Copyright (c) 2022 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -65,30 +65,52 @@ void forward_lite_lstm_if32of32wf32( AI_CONST ai_float* kernel,
 void forward_lite_lstm_is8os8ws8(  AI_CONST ai_i8* kernel[AI_LITE_LSTM_MAX],
                                    AI_CONST ai_i8* recurrent[AI_LITE_LSTM_MAX],
                                    AI_CONST ai_i32* bias[AI_LITE_LSTM_MAX],
-                                   AI_CONST ai_i8* initial_hidden,
-                                   ai_i8* out_hidden,
+                                   ai_i8* inout_hidden,
                                    ai_u16 batch_size,
                                    ai_u16 n_features,
                                    ai_u16 n_cell,
-                                   AI_CONST ai_i16* initial_cell,
-                                   ai_i16* out_cell,
+                                   ai_i16* inout_cell,
+                                   AI_CONST ai_float cell_scale,
                                    ai_i8* data_in,
-                                   const ai_i8 in_zeropoint,
-                                   const ai_float in_scale,
+                                   AI_CONST ai_i8 in_zeropoint,
+                                   AI_CONST ai_float in_scale,
                                    ai_i8* data_out,
-                                   const ai_i8 out_zeropoint,
-                                   const ai_float out_scale,
-                                   const ai_float kernel_scale[AI_LITE_LSTM_MAX],
-                                   const ai_float recurrent_scale[AI_LITE_LSTM_MAX],
+                                   AI_CONST ai_i8 out_zeropoint,
+                                   AI_CONST ai_float out_scale,
+                                   AI_CONST ai_float kernel_scale[AI_LITE_LSTM_MAX],
+                                   AI_CONST ai_float recurrent_scale[AI_LITE_LSTM_MAX],
                                    ai_i32 timesteps,
                                    ai_i32 nb_t_out,
                                    ai_bool go_backwards,
                                    ai_bool reverse_seq,
-                                   ai_bool stateful,
                                    ai_bool time_major,
-                                   ai_bool return_state,
                                    ai_i32 scratch_size,
                                    ai_i8 *p_scratch_data);
 
+
+void forward_lite_lstm_is16os16ws8(  AI_CONST ai_i8* kernel[AI_LITE_LSTM_MAX],
+                                   AI_CONST ai_i8* recurrent[AI_LITE_LSTM_MAX],
+                                   AI_CONST ai_i64* bias[AI_LITE_LSTM_MAX],
+                                   ai_i16* inout_hidden,
+                                   ai_u16 batch_size,
+                                   ai_u16 n_features,
+                                   ai_u16 n_cell,
+                                   ai_i16* inout_cell,
+                                   AI_CONST ai_float cell_scale,
+                                   ai_i16* data_in,
+                                   AI_CONST ai_i16 in_zeropoint,
+                                   AI_CONST ai_float in_scale,
+                                   ai_i16* data_out,
+                                   AI_CONST ai_i16 out_zeropoint,
+                                   AI_CONST ai_float out_scale,
+                                   AI_CONST ai_float kernel_scale[AI_LITE_LSTM_MAX],
+                                   AI_CONST ai_float recurrent_scale[AI_LITE_LSTM_MAX],
+                                   ai_i32 timesteps,
+                                   ai_i32 nb_t_out,
+                                   ai_bool go_backwards,
+                                   ai_bool reverse_seq,
+                                   ai_bool time_major,
+                                   ai_i32 scratch_size,
+                                   ai_i16 *p_scratch_data);
 #endif /* LITE_LSTM_H */
 

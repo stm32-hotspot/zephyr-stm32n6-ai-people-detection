@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_util.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file of ATON utility functions
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2021-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -63,25 +63,34 @@ extern "C"
 #endif
 
 #define __clean_errno() (errno == 0 ? "None" : strerror(errno))
-#define __log_error(M, ...)                                                                                            \
-  LL_ATON_PRINTF("[ERROR] (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, __clean_errno(), ##__VA_ARGS__)
+#define __log_error(...)                                                                                               \
+  do                                                                                                                   \
+  {                                                                                                                    \
+    LL_ATON_PRINTF("[ERROR] (%s:%d: errno: %s) ", __FILE__, __LINE__, __clean_errno());                                \
+    LL_ATON_PRINTF(__VA_ARGS__);                                                                                       \
+    LL_ATON_PRINTF("\n");                                                                                              \
+  } while (0)
 
 /**
  *  @brief Checks a condition: if it evaluates to false, prints an error message and asserts(false).
  *  @param COND the condition to check.
- *  @param MSG the message to print if the condition evaluates to false (can be a formatted string as well)
  *  @param ASSERT_COND boolean parameter: if 1, this command will LL_ATON_ASSERT(COND), otherwise il will
  * LL_ATON_ASSERT(0)
- *  @param variadic_args the (potential) variables to print in the message's formatted string, if any
+ *  @param variadic_args the message to print if the condition evaluates to false with the (potential) variables to
+ * print in the message's formatted string, if any
  */
-#define assertf(COND, ASSERT_COND, MSG, ...)                                                                           \
+#define assertf(COND, ASSERT_COND, ...)                                                                                \
   if (!(COND))                                                                                                         \
   {                                                                                                                    \
-    __log_error(MSG, ##__VA_ARGS__);                                                                                   \
+    __log_error(__VA_ARGS__);                                                                                          \
     if (ASSERT_COND)                                                                                                   \
+    {                                                                                                                  \
       LL_ATON_ASSERT(COND);                                                                                            \
+    }                                                                                                                  \
     else                                                                                                               \
+    {                                                                                                                  \
       LL_ATON_ASSERT(0);                                                                                               \
+    }                                                                                                                  \
   }
 
   /**

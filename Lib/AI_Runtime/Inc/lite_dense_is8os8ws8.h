@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    lite_dense_is8os8ws8.h
-  * @author  AIS
+  * @author  STMicroelectronics
   * @brief   header file of AI platform lite dense kernel datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
+  * Copyright (c) 2022 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -54,31 +54,61 @@ void forward_lite_dense_is8os8ws8(ai_i8 * pDataOut,
                                   const ai_float Wt_scale,
                                   ai_i16 *pBuffer_a);
 
-void forward_lite_dense_hsp_is8os8ws8(ai_i8 * pDataOut,
-                                  const ai_i8 *pDataIn,
-                                  const ai_i8 *pWeights,
-                                  const ai_i32 *pBias,
-                                  const ai_i8 in_zeropoint,
-                                  const ai_i8 out_zeropoint,
-                                  const ai_u16 n_channel_in,
-                                  const ai_u16 n_channel_out,
-                                  const ai_size n_pixels,
-                                  const ai_float in_scale,
-                                  const ai_float out_scale,
-                                  const ai_float Wt_scale);
+void forward_lite_dense_hsp0_is8os8ws8(ai_i8 * pDataOut,
+                                       const ai_i8 *pDataIn,
+                                       const ai_i8 *pWeights,
+                                       const ai_i32 *pBias,
+                                       const ai_i8 in_zeropoint,
+                                       const ai_i8 out_zeropoint,
+                                       const ai_u16 n_channel_in,
+                                       const ai_u16 n_channel_out,
+                                       const ai_size n_pixels,
+                                       const ai_float in_scale,
+                                       const ai_float out_scale,
+                                       const ai_float Wt_scale,
+                                       const ai_u16 bram_size);
 
-void forward_lite_dense_hsp_1step_is8os8ws8(ai_i8 * pDataOut,
-                                  const ai_i8 *pDataIn,
-                                  const ai_i8 *pWeights,
-                                  const ai_i32 *pBias,
-                                  const ai_i8 in_zeropoint,
-                                  const ai_i8 out_zeropoint,
-                                  const ai_u16 n_channel_in,
-                                  const ai_u16 n_channel_out,
-                                  const ai_size n_pixels,
-                                  const ai_float in_scale,
-                                  const ai_float out_scale,
-                                  const ai_float Wt_scale);
+void forward_lite_dense_hsp1_is8os8ws8(ai_i8 * pDataOut,
+                                       const ai_i8 *pDataIn,
+                                       const ai_i8 *pWeights,
+                                       const ai_i32 *pBias,
+                                       const ai_i8 in_zeropoint,
+                                       const ai_i8 out_zeropoint,
+                                       const ai_u16 n_channel_in,
+                                       const ai_u16 n_channel_out,
+                                       const ai_size n_pixels,
+                                       const ai_float in_scale,
+                                       const ai_float out_scale,
+                                       const ai_float Wt_scale,
+                                       const ai_u16 bram_size);
+
+void forward_lite_dense_hsp0D_is8os8ws8(ai_i8 * pDataOut,
+                                        const ai_i8 *pDataIn,
+                                        const ai_i8 *pWeights,
+                                        const ai_i32 *pBias,
+                                        const ai_i8 in_zeropoint,
+                                        const ai_i8 out_zeropoint,
+                                        const ai_u16 n_channel_in,
+                                        const ai_u16 n_channel_out,
+                                        const ai_size n_pixels,
+                                        const ai_float in_scale,
+                                        const ai_float out_scale,
+                                        const ai_float Wt_scale,
+                                        const ai_u16 bram_size);
+
+void forward_lite_dense_hsp1D_is8os8ws8(ai_i8 * pDataOut,
+                                        const ai_i8 *pDataIn,
+                                        const ai_i8 *pWeights,
+                                        const ai_i32 *pBias,
+                                        const ai_i8 in_zeropoint,
+                                        const ai_i8 out_zeropoint,
+                                        const ai_u16 n_channel_in,
+                                        const ai_u16 n_channel_out,
+                                        const ai_size n_pixels,
+                                        const ai_float in_scale,
+                                        const ai_float out_scale,
+                                        const ai_float Wt_scale,
+                                        const ai_u16 bram_size);
 
 void forward_lite_dense_is8os8ws8_ch(ai_i8 * pDataOut,
                                      const ai_i8 *pDataIn,

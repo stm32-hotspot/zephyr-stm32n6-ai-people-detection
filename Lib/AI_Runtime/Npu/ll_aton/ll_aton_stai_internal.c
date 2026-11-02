@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_stai_internal.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Implementation of ST.AI public & internal APIs for ATON
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2023-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -142,7 +142,7 @@ static void _stai_aton_internal_rt_callback(LL_ATON_RT_Callbacktype_t ctype)
 
 STAI_INTERNAL_ENTRY
 void _stai_aton_internal_epoch_block_callback(LL_ATON_RT_Callbacktype_t ctype, const NN_Instance_TypeDef *nn_instance,
-                                              const EpochBlock_ItemTypeDef *epoch_block)
+                                              const LL_ATON_RT_EpochBlockItem_t *epoch_block)
 {
   STAI_ASSERT(nn_instance != NULL);
   _stai_aton_context *stai_nn_ctx =

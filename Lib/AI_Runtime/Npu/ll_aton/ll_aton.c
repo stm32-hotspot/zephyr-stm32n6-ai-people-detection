@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   ATON LL module driver.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2021-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -23,7 +23,20 @@
 
 #include "ll_aton.h"
 #include "ll_aton_caches_interface.h"
+#include "ll_aton_reg_helper.h"
 #include "ll_aton_util.h"
+
+#ifndef ATON_STRENG_ENCRYPTION_EN
+#define ATON_STRENG_ENCRYPTION_EN(UNIT) ATON_STR2BUS_ENCRYPTION_ENABLED
+#endif
+
+#ifndef ATON_BUSIF_ENCRYPTION_EN
+#define ATON_BUSIF_ENCRYPTION_EN(UNIT) ATON_STR2BUS_ENCRYPTION_ENABLED
+#endif
+
+#ifndef ATON_EPOCHCTRL_ENCRYPTION_EN
+#define ATON_EPOCHCTRL_ENCRYPTION_EN(UNIT) ATON_EPOCHCTRL_ENCRYPTION_ENABLED
+#endif
 
 #define ATONN_CONST_SRCPORT(S, J, U, I, P) ATON_##S##_##J##_LINK_##U##_##I##_##P
 #define ATONN_CONST_DSTPORT(S, J, U, I, P) ATON_##S##_DST_OFFSET(J, ATON_##S##_##J##_DST##U##_##I##_##P##_IDX)
@@ -32,26 +45,25 @@
 static uint32_t Conv_ctrl_bits[ATON_CONVACC_NUM]; // this is an hack FIXME !!!
 #endif
 
-#if (ATON_POOL_VERSION_MAJOR_DT < 1) || ((ATON_POOL_VERSION_MAJOR_DT == 1) && (ATON_POOL_VERSION_MINOR_DT <= 0))
-#define POOL_RC14    /* Pooling unit is not yet patched with respect to auto-clearing of `CLR` bit and consistent SW/HW \
-                        reset values */
-#endif
-
-#define ASSERT_UNITS_VERS_W_MSG(unitname, rtl_unitver)                                                                 \
+#define ASSERT_UNITS_VERS_W_MSG(unitname)                                                                              \
   do                                                                                                                   \
   {                                                                                                                    \
-    rtl_unitver = ATON_##unitname##_VERSION_GET(0);                                                                    \
-  } while (rtl_unitver == 0);                                                                                          \
-  assertf(ATON_##unitname##_VERSION_GET_TYPE(rtl_unitver) == ATON_##unitname##_VERSION_TYPE_DT &&                      \
-              ATON_##unitname##_VERSION_GET_MAJOR(rtl_unitver) == ATON_##unitname##_VERSION_MAJOR_DT &&                \
-              ATON_##unitname##_VERSION_GET_MINOR(rtl_unitver) == ATON_##unitname##_VERSION_MINOR_DT,                  \
-          0,                                                                                                           \
-          "%s unit ver mismatch: RTL:t=%" PRIu32 ",ver=%" PRIu32 ".%" PRIu32 "  ATON.h:t=%" PRIu32 ",ver=%" PRIu32     \
-          ".%" PRIu32 "\n\r",                                                                                          \
-          #unitname, ATON_##unitname##_VERSION_GET_TYPE(rtl_unitver),                                                  \
-          ATON_##unitname##_VERSION_GET_MAJOR(rtl_unitver), ATON_##unitname##_VERSION_GET_MINOR(rtl_unitver),          \
-          (uint32_t)ATON_##unitname##_VERSION_TYPE_DT, (uint32_t)ATON_##unitname##_VERSION_MAJOR_DT,                   \
-          (uint32_t)ATON_##unitname##_VERSION_MINOR_DT)
+    uint32_t rtl_unitver;                                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+      rtl_unitver = ATON_##unitname##_VERSION_GET(0);                                                                  \
+    } while (rtl_unitver == 0);                                                                                        \
+    assertf(ATON_##unitname##_VERSION_GET_TYPE(rtl_unitver) == ATON_##unitname##_VERSION_TYPE_DT &&                    \
+                ATON_##unitname##_VERSION_GET_MAJOR(rtl_unitver) == ATON_##unitname##_VERSION_MAJOR_DT &&              \
+                ATON_##unitname##_VERSION_GET_MINOR(rtl_unitver) == ATON_##unitname##_VERSION_MINOR_DT,                \
+            0,                                                                                                         \
+            "%s unit ver mismatch: RTL:t=%" PRIu32 ",ver=%" PRIu32 ".%" PRIu32 "  ATON.h:t=%" PRIu32 ",ver=%" PRIu32   \
+            ".%" PRIu32 "\n\r",                                                                                        \
+            #unitname, ATON_##unitname##_VERSION_GET_TYPE(rtl_unitver),                                                \
+            ATON_##unitname##_VERSION_GET_MAJOR(rtl_unitver), ATON_##unitname##_VERSION_GET_MINOR(rtl_unitver),        \
+            (uint32_t)ATON_##unitname##_VERSION_TYPE_DT, (uint32_t)ATON_##unitname##_VERSION_MAJOR_DT,                 \
+            (uint32_t)ATON_##unitname##_VERSION_MINOR_DT);                                                             \
+  } while (0)
 
 /** @defgroup Simple watchdog management functions.
  *  Used to exit from LL_Streng_Wait() in case epoch locks
@@ -60,6 +72,7 @@ static uint32_t Conv_ctrl_bits[ATON_CONVACC_NUM]; // this is an hack FIXME !!!
 
 static inline void ll_aton_static_checks(void)
 {
+#ifdef ATON_STRENG_NUM
   static char done = 0;
 
   if (done != 0)
@@ -67,9 +80,17 @@ static inline void ll_aton_static_checks(void)
   done = 1;
 
 #define ASSERT_ATONN_SRCPORT(S, J, U, I, P)                                                                            \
-  LL_ATON_ASSERT(ATONN_CONST_SRCPORT(S, J, U, I, P) == __atonn_getSrcPortID(S, J, U, I, P))
+  {                                                                                                                    \
+    PortType src_port = {S, J, U, I, P};                                                                               \
+    LL_ATON_LIB_UNUSED(src_port);                                                                                      \
+    LL_ATON_ASSERT(ATONN_CONST_SRCPORT(S, J, U, I, P) == LL_getSrcPortID(src_port));                                   \
+  }
 #define ASSERT_ATONN_DSTPORT(S, J, U, I, P)                                                                            \
-  LL_ATON_ASSERT(ATONN_CONST_DSTPORT(S, J, U, I, P) == __atonn_getDstPortID(S, J, U, I, P))
+  {                                                                                                                    \
+    PortType dst_port = {S, J, U, I, P};                                                                               \
+    LL_ATON_LIB_UNUSED(dst_port);                                                                                      \
+    LL_ATON_ASSERT(ATONN_CONST_DSTPORT(S, J, U, I, P) == LL_getDstPortID(dst_port));                                   \
+  }
 
 #if ATON_STRENG_NUM > 1
   ASSERT_ATONN_SRCPORT(STRSWITCH, 0, STRENG, 1, 0);
@@ -122,6 +143,7 @@ static inline void ll_aton_static_checks(void)
 
 #undef ASSERT_ATONN_SRCPORT
 #undef ASSERT_ATONN_DSTPORT
+#endif // ATON_STRENG_NUM
 }
 
 unsigned char *LL_Address_Physical2Virtual(unsigned char *address)
@@ -141,7 +163,7 @@ unsigned char *LL_Address_Virtual2Physical(unsigned char *address)
  */
 LL_ATON_WEAK int startWatchdog(uint32_t timeout)
 {
-  (void)timeout;
+  LL_ATON_LIB_UNUSED(timeout);
 
   return 0;
 }
@@ -166,7 +188,6 @@ LL_ATON_WEAK int checkWatchdog(void)
 int LL_ATON_Init(void)
 {
   uint32_t t;
-  int i;
 
   ll_aton_static_checks();
 
@@ -177,80 +198,91 @@ int LL_ATON_Init(void)
 
   /* Enable all ATON clocks */
   ATON_CLKCTRL_CTRL_SET(0, 1);
-  ATON_CLKCTRL_AGATES0_SET(0, 0xffffffff);
-  ATON_CLKCTRL_AGATES1_SET(0, 0xffffffff);
-
-#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
-#if (LL_ATON_PLATFORM == LL_ATON_PLAT_EC_TRACE)
-  ATON_CLKCTRL_BGATES_SET(0, (1 << ATON_EPOCHCTRL_CLKB_CLK(0)));
-#else
-  ATON_CLKCTRL_BGATES_SET(0, 0x0);
-#endif
-#else
-  ATON_CLKCTRL_BGATES_SET(0, 0xffffffff);
-#endif
-
-#ifdef ATON_CLKCTRL_BGATES1_OFFSET
-  ATON_CLKCTRL_BGATES1_SET(0, 0xffffffff);
-#endif
+  LL_ATON_EnableAllClocks();
 
   /* Check that RTL and ATON.h match. Only check first unit */
-  ASSERT_UNITS_VERS_W_MSG(STRENG, t);
-
-#ifdef ATON_CONVACC_NUM
-  ASSERT_UNITS_VERS_W_MSG(CONVACC, t);
-#endif
-
-#ifdef ATON_POOL_NUM
-  ASSERT_UNITS_VERS_W_MSG(POOL, t);
-#endif
-
-#ifdef ATON_ARITH_NUM
-  ASSERT_UNITS_VERS_W_MSG(ARITH, t);
-#endif
-
-#ifdef ATON_ACTIV_NUM
-  ASSERT_UNITS_VERS_W_MSG(ACTIV, t);
-#endif
-
-#ifdef ATON_DECUN_NUM
-  ASSERT_UNITS_VERS_W_MSG(DECUN, t);
-#endif
-
-#ifdef ATON_EPOCHCTRL_VERSION_TYPE_DT
-  ASSERT_UNITS_VERS_W_MSG(EPOCHCTRL, t);
-#endif
-
-#ifdef ATON_RECBUF_VERSION_TYPE_DT
-  ASSERT_UNITS_VERS_W_MSG(RECBUF, t);
+#ifdef ATON_STRENG_NUM
+  ASSERT_UNITS_VERS_W_MSG(STRENG);
 #endif
 
 #ifdef ATON_STRENG64_NUM
-  ASSERT_UNITS_VERS_W_MSG(STRENG64, t);
+  ASSERT_UNITS_VERS_W_MSG(STRENG64);
 #endif
 
-#ifdef ATON_STRSWITCH64_NUM
-  ASSERT_UNITS_VERS_W_MSG(STRSWITCH64, t);
+#ifdef ATON_STREAM_CV_CTRL_NUM
+  ASSERT_UNITS_VERS_W_MSG(STREAM_CV_CTRL);
+#endif
+
+#ifdef ATON_CONVACC_NUM
+  ASSERT_UNITS_VERS_W_MSG(CONVACC);
+#endif
+
+#ifdef ATON_POOL_NUM
+  ASSERT_UNITS_VERS_W_MSG(POOL);
+#endif
+
+#ifdef ATON_ARITH_NUM
+  ASSERT_UNITS_VERS_W_MSG(ARITH);
+#endif
+
+#ifdef ATON_ACTIV_NUM
+  ASSERT_UNITS_VERS_W_MSG(ACTIV);
+#endif
+
+#ifdef ATON_DECUN_NUM
+  ASSERT_UNITS_VERS_W_MSG(DECUN);
+#endif
+
+#ifdef ATON_EPOCHCTRL_VERSION_TYPE_DT
+  ASSERT_UNITS_VERS_W_MSG(EPOCHCTRL);
+#endif
+
+#ifdef ATON_RECBUF_VERSION_TYPE_DT
+  ASSERT_UNITS_VERS_W_MSG(RECBUF);
+#endif
+
+#ifdef ATON_STRSWITCH_NUM
+  ASSERT_UNITS_VERS_W_MSG(STRSWITCH);
 #endif
 
 #ifdef ATON_STRSWITCH_VC_NUM
-  ASSERT_UNITS_VERS_W_MSG(STRSWITCH_VC, t);
+  ASSERT_UNITS_VERS_W_MSG(STRSWITCH_VC);
 #endif
 
 #ifdef ATON_IMC_NUM
-  ASSERT_UNITS_VERS_W_MSG(IMC, t);
+  ASSERT_UNITS_VERS_W_MSG(IMC);
 #endif
 
-  ASSERT_UNITS_VERS_W_MSG(CLKCTRL, t);
+#ifdef ATON_LOST_NUM
+  ASSERT_UNITS_VERS_W_MSG(LOST);
+#endif
 
-  ASSERT_UNITS_VERS_W_MSG(INTCTRL, t);
+#ifdef ATON_VESPRO_NUM
+  ASSERT_UNITS_VERS_W_MSG(VESPRO);
+#endif
 
-  ASSERT_UNITS_VERS_W_MSG(STRSWITCH, t);
+#ifdef ATON_VPOOL_NUM
+  ASSERT_UNITS_VERS_W_MSG(VPOOL);
+#endif
 
-  ASSERT_UNITS_VERS_W_MSG(BUSIF, t);
+#ifdef ATON_RECUR_NUM
+  ASSERT_UNITS_VERS_W_MSG(RECUR);
+#endif
+
+#ifdef ATON_CLKCTRL_NUM
+  ASSERT_UNITS_VERS_W_MSG(CLKCTRL);
+#endif
+
+#ifdef ATON_INTCTRL_NUM
+  ASSERT_UNITS_VERS_W_MSG(INTCTRL);
+#endif
+
+#ifdef ATON_BUSIF_NUM
+  ASSERT_UNITS_VERS_W_MSG(BUSIF);
+#endif
 
   /* Enable Bus Interfaces */
-  for (i = 0; i < ATON_BUSIF_NUM; i++)
+  for (int i = 0; i < ATON_BUSIF_NUM; i++)
   {
     ATON_BUSIF_CTRL_SET(i, 1);
   }
@@ -267,24 +299,17 @@ int LL_ATON_Init(void)
  */
 int LL_ATON_DeInit(void)
 {
-  int i;
-
   /* Disable Interrupt Controller */
   ATON_INTCTRL_CTRL_SET(0, 0);
 
   /* Disable Bus Interfaces */
-  for (i = 0; i < ATON_BUSIF_NUM; i++)
+  for (int i = 0; i < ATON_BUSIF_NUM; i++)
   {
     ATON_BUSIF_CTRL_SET(i, 0);
   }
 
   /* Disable all ATON clocks */
-  ATON_CLKCTRL_AGATES0_SET(0, 0);
-  ATON_CLKCTRL_AGATES1_SET(0, 0);
-  ATON_CLKCTRL_BGATES_SET(0, 0);
-#ifdef ATON_CLKCTRL_BGATES1_OFFSET
-  ATON_CLKCTRL_BGATES1_SET(0, 0);
-#endif
+  LL_ATON_DisableAllClocks();
   ATON_CLKCTRL_CTRL_SET(0, 0);
 
   return 0;
@@ -303,6 +328,8 @@ int LL_ATON_EnableUnits_Init(const LL_ATON_EnableUnits_InitTypeDef *LL_ATON_Enab
   enum AccelUnitsType unitType;
   uint32_t unitId;
 
+#define ATON_ENABLE(unitname, id) ATON_REG_WRITE_FIELD(unitname, id, CTRL, EN, 1)
+
   for (i = 0; i < n; i++)
   {
     unitType = LL_ATON_EnableUnits_InitStruct[i].unit.unit_type;
@@ -310,13 +337,27 @@ int LL_ATON_EnableUnits_Init(const LL_ATON_EnableUnits_InitTypeDef *LL_ATON_Enab
 
     switch (unitType)
     {
+#ifdef ATON_STRENG_NUM
     case STRENG:
       ATON_ENABLE(STRENG, unitId);
       break;
+#endif
 
 #ifdef ATON_STRENG64_NUM
     case STRENG64:
       ATON_ENABLE(STRENG64, unitId);
+      break;
+#endif
+
+#ifdef ATON_EPOCHCTRL_NUM
+    case EPOCHCTRL:
+      ATON_ENABLE(EPOCHCTRL, unitId);
+      break;
+#endif
+
+#ifdef ATON_INTCTRL_NUM
+    case INTCTRL:
+      ATON_ENABLE(INTCTRL, unitId);
       break;
 #endif
 
@@ -350,16 +391,49 @@ int LL_ATON_EnableUnits_Init(const LL_ATON_EnableUnits_InitTypeDef *LL_ATON_Enab
 
 #ifdef ATON_POOL_NUM
     case POOL:
-#ifdef POOL_RC14
-      ATON_POOL_CTRL_SET(unitId, ATON_POOL_CTRL_SET_EN(ATON_POOL_CTRL_GET(unitId), 1));
-#else  // !POOL_RC14
       ATON_ENABLE(POOL, unitId);
-#endif // !POOL_RC14
       break;
 #endif
+
+#ifdef ATON_IMC_NUM
+    case IMC:
+      ATON_ENABLE(IMC, unitId);
+      break;
+#endif
+
 #ifdef ATON_RECBUF_NUM
     case RECBUF:
       ATON_ENABLE(RECBUF, unitId);
+      break;
+#endif
+
+#ifdef ATON_STREAM_CV_CTRL_NUM
+    case STREAM_CV_CTRL:
+      ATON_ENABLE(STREAM_CV_CTRL, unitId);
+      break;
+#endif
+
+#ifdef ATON_LOST_NUM
+    case LOST:
+      ATON_ENABLE(LOST, unitId);
+      break;
+#endif
+
+#ifdef ATON_VESPRO_NUM
+    case VESPRO:
+      ATON_ENABLE(VESPRO, unitId);
+      break;
+#endif
+
+#ifdef ATON_VPOOL_NUM
+    case VPOOL:
+      ATON_ENABLE(VPOOL, unitId);
+      break;
+#endif
+
+#ifdef ATON_RECUR_NUM
+    case RECUR:
+      ATON_ENABLE(RECUR, unitId);
       break;
 #endif
 
@@ -367,6 +441,8 @@ int LL_ATON_EnableUnits_Init(const LL_ATON_EnableUnits_InitTypeDef *LL_ATON_Enab
       break;
     }
   }
+
+#undef ATON_ENABLE
 
   return 0;
 }
@@ -384,6 +460,12 @@ int LL_ATON_DisableUnits_Init(const LL_ATON_DisableUnits_InitTypeDef *LL_ATON_Di
   uint32_t unitId;
   uint32_t t;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
+#define Disable_CLOCK_GATING(unitname, id) LL_ATON_DisableClock(ATON_##unitname##_CLKB_CLK(id))
+#else
+#define Disable_CLOCK_GATING(unitname, id) ((void)0)
+#endif
+
   for (i = 0; i < n; i++)
   {
     unitType = LL_ATON_DisableUnits_InitStruct[i].unit.unit_type;
@@ -393,55 +475,128 @@ int LL_ATON_DisableUnits_Init(const LL_ATON_DisableUnits_InitTypeDef *LL_ATON_Di
     {
 #ifdef ATON_STRENG_NUM
     case STRENG:
-      ATON_DISABLE(STRENG, unitId);
-      LL_ATON_DisableClock(ATON_STRENG_CLKB_CLK(unitId));
+      ATON_DISABLE_CLR(STRENG, unitId);
+      ATON_DISABLE_CONFCLR(STRENG, unitId);
+      Disable_CLOCK_GATING(STRENG, unitId);
+      break;
+#endif
+
+#ifdef ATON_STRENG64_NUM
+    case STRENG64:
+      ATON_DISABLE_CLR(STRENG64, unitId);
+      ATON_DISABLE_CONFCLR(STRENG64, unitId);
+      Disable_CLOCK_GATING(STRENG64, unitId);
+      break;
+#endif
+
+#ifdef ATON_EPOCHCTRL_NUM
+    case EPOCHCTRL:
+      ATON_DISABLE_CLR(EPOCHCTRL, unitId);
+      ATON_DISABLE_CONFCLR(EPOCHCTRL, unitId);
+      Disable_CLOCK_GATING(EPOCHCTRL, unitId);
+      break;
+#endif
+
+#ifdef ATON_INTCTRL_NUM
+    case INTCTRL:
+      ATON_DISABLE_CLR(INTCTRL, unitId);
+      ATON_DISABLE_CONFCLR(INTCTRL, unitId);
       break;
 #endif
 
 #ifdef ATON_CONVACC_NUM
     case CONVACC:
-      ATON_DISABLE(CONVACC, unitId);
-      LL_ATON_DisableClock(ATON_CONVACC_CLKB_CLK(unitId));
+      ATON_DISABLE_CLR(CONVACC, unitId);
+      ATON_DISABLE_CONFCLR(CONVACC, unitId);
+      Disable_CLOCK_GATING(CONVACC, unitId);
       break;
 #endif
 
 #ifdef ATON_DECUN_NUM
     case DECUN:
-      ATON_DISABLE(DECUN, unitId);
-      LL_ATON_DisableClock(ATON_DECUN_CLKB_CLK(unitId));
+      ATON_DISABLE_CLR(DECUN, unitId);
+      ATON_DISABLE_CONFCLR(DECUN, unitId);
+      Disable_CLOCK_GATING(DECUN, unitId);
       break;
 #endif
 
 #ifdef ATON_ACTIV_NUM
     case ACTIV:
-      ATON_DISABLE(ACTIV, unitId);
-      LL_ATON_DisableClock(ATON_ACTIV_CLKB_CLK(unitId));
+      ATON_DISABLE_CLR(ACTIV, unitId);
+      ATON_DISABLE_CONFCLR(ACTIV, unitId);
+      Disable_CLOCK_GATING(ACTIV, unitId);
       break;
 #endif
 
 #ifdef ATON_ARITH_NUM
     case ARITH:
-      ATON_DISABLE(ARITH, unitId);
-      LL_ATON_DisableClock(ATON_ARITH_CLKB_CLK(unitId));
+      ATON_DISABLE_CLR(ARITH, unitId);
+      ATON_DISABLE_CONFCLR(ARITH, unitId);
+      Disable_CLOCK_GATING(ARITH, unitId);
       break;
 #endif
 
 #ifdef ATON_POOL_NUM
     case POOL:
-#ifdef POOL_RC14
-      ATON_POOL_CTRL_SET(unitId, ATON_POOL_CTRL_SET_EN(ATON_POOL_CTRL_GET(unitId), 0));
-#else  // !POOL_RC14
-      ATON_DISABLE(POOL, unitId);
-#endif // !POOL_RC14
+      ATON_DISABLE_CLR(POOL, unitId);
+      ATON_DISABLE_CONFCLR(POOL, unitId);
+      Disable_CLOCK_GATING(POOL, unitId);
+      break;
+#endif
 
-      LL_ATON_DisableClock(ATON_POOL_CLKB_CLK(unitId));
+#ifdef ATON_IMC_NUM
+    case IMC:
+      ATON_DISABLE_CLR(IMC, unitId);
+      ATON_DISABLE_CONFCLR(IMC, unitId);
+      Disable_CLOCK_GATING(IMC,unitId));
       break;
 #endif
 
 #ifdef ATON_RECBUF_NUM
     case RECBUF:
-      ATON_DISABLE(RECBUF, unitId);
-      LL_ATON_DisableClock(ATON_RECBUF_CLKB_CLK(unitId));
+      ATON_DISABLE_CLR(RECBUF, unitId);
+      ATON_DISABLE_CONFCLR(RECBUF, unitId);
+      Disable_CLOCK_GATING(RECBUF, unitId);
+      break;
+#endif
+
+#ifdef ATON_STREAM_CV_CTRL_NUM
+    case STREAM_CV_CTRL:
+      ATON_DISABLE_CLR(STREAM_CV_CTRL, unitId);
+      ATON_DISABLE_CONFCLR(STREAM_CV_CTRL, unitId);
+      Disable_CLOCK_GATING(STREAM, unitId));
+      break;
+#endif
+
+#ifdef ATON_LOST_NUM
+    case LOST:
+      ATON_DISABLE_CLR(LOST, unitId);
+      ATON_DISABLE_CONFCLR(LOST, unitId);
+      Disable_CLOCK_GATING(LOST, unitId));
+      break;
+#endif
+
+#ifdef ATON_VESPRO_NUM
+    case VESPRO:
+      ATON_DISABLE_CLR(VESPRO, unitId);
+      ATON_DISABLE_CONFCLR(VESPRO, unitId);
+      Disable_CLOCK_GATING(VESPRO, unitId));
+      break;
+#endif
+
+#ifdef ATON_VPOOL_NUM
+    case VPOOL:
+      ATON_DISABLE_CLR(VPOOL, unitId);
+      ATON_DISABLE_CONFCLR(VPOOL, unitId);
+      Disable_CLOCK_GATING(VPOOL, unitId));
+      break;
+#endif
+
+#ifdef ATON_RECUR_NUM
+    case RECUR:
+      ATON_DISABLE_CLR(RECUR, unitId);
+      ATON_DISABLE_CONFCLR(RECUR, unitId);
+      Disable_CLOCK_GATING(RECUR, unitId));
       break;
 #endif
 
@@ -450,8 +605,12 @@ int LL_ATON_DisableUnits_Init(const LL_ATON_DisableUnits_InitTypeDef *LL_ATON_Di
     }
   }
 
+#undef Disable_CLOCK_GATING
+
   return LL_ATON_OK;
 }
+
+#ifdef ATON_STRENG_NUM
 
 /**
  * @brief  Waits for streaming engine(s) to become idle
@@ -502,7 +661,9 @@ int LL_Streng_TensorInit(int id, const LL_Streng_TensorInitTypeDef *conf, int n)
   if (id >= ATON_STRENG_NUM)
     return LL_ATON_INVALID_ID;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_STRENG_CLKB_CLK(id));
+#endif
 
 #define _LL_min(x, y) ((x) > (y) ? (y) : (x))
 
@@ -727,16 +888,14 @@ int LL_Streng_TensorInit(int id, const LL_Streng_TensorInitTypeDef *conf, int n)
 #if LL_ATON_EN_EVENT_IRQ
     t_streng_event = 0;
     t_streng_event = ATON_STRENG_EVENT_SET_EN_OFLOW_FRM(t_streng_event, 1); // enable frame overflow interrupt
-#if 0
-    t_streng_event = ATON_STRENG_EVENT_SET_EN_OFLOW_ADD(t_streng_event, 1); // enable address limiter interrupt
-#endif
-#endif // LL_ATON_EN_EVENT_IRQ
+#endif                                                                      // LL_ATON_EN_EVENT_IRQ
   }
 
-  /* Enable illegal configuration interrupts */
+  /* Enable error interrupts */
 #if LL_ATON_EN_ERROR_IRQ
   t = t_streng_event;
-  t = ATON_STRENG_EVENT_SET_EN_ILLCFG(t, 1); // Enable Illegal Configuration interrupt
+  t = ATON_STRENG_EVENT_SET_EN_ILLCFG(t, 1);    // Enable Illegal Configuration interrupt
+  t = ATON_STRENG_EVENT_SET_EN_OFLOW_ADD(t, 1); // Enable Address Limiter interrupt
   // t = ATON_STRENG_EVENT_SET_EN_FMTMM(t, 1); // Enable Format Mismatch interrupt (intentionally not enabled)
   t_streng_event = t;
 #endif // LL_ATON_EN_ERROR_IRQ
@@ -773,6 +932,55 @@ int LL_Streng_TensorInit(int id, const LL_Streng_TensorInitTypeDef *conf, int n)
 }
 
 /**
+ * @brief Configures the Streaming Engine Encryption support
+ * @param id Streaming engine identifier [0..ATON_STRENG_NUM-1]
+ * @param LL_Streng_EncryptionStruct Pointer to structure describing encryption parameters
+ * @note Encryption keys are set in the Bus Interfaces using LL_Busif_SetKeys function
+ * @note Each Stream Engine is associated to a Bus Interface. Machine descriptor json file describes how they are
+ * grouped
+ */
+int LL_Streng_EncryptionInit(int id, const LL_Streng_EncryptionTypedef *LL_Streng_EncryptionStruct)
+{
+  uint32_t t;
+
+  if ((id >= ATON_STRENG_NUM) || (!ATON_STRENG_ENCRYPTION_EN(id)))
+    return LL_ATON_INVALID_ID;
+
+  t = LL_Streng_EncryptionStruct->encryption_id & 0xffffffff;
+
+#if (LL_ATON_PLATFORM == LL_ATON_PLAT_EC_TRACE)
+  if (LL_Streng_EncryptionStruct->patch_enable)
+  {
+    ec_trace_add_patch("SE_ENCRYPTION_ID", 0, 0xffffffff);
+  }
+#endif
+
+  ATON_STRENG_ENCR_LSB_SET(id, t);
+
+  t = ATON_STRENG_ENCR_MSB_DT;
+  t = ATON_STRENG_ENCR_MSB_SET_ID_MSB(t, (LL_Streng_EncryptionStruct->encryption_id >> 32) & 0x7ff);
+  t = ATON_STRENG_ENCR_MSB_SET_EN(t, LL_Streng_EncryptionStruct->enable);
+  t = ATON_STRENG_ENCR_MSB_SET_ROUNDS(t, LL_Streng_EncryptionStruct->rounds);
+  t = ATON_STRENG_ENCR_MSB_SET_KEY_SEL(t, LL_Streng_EncryptionStruct->key_sel);
+  t = ATON_STRENG_ENCR_MSB_SET_INC(t, LL_Streng_EncryptionStruct->increment);
+
+#if (LL_ATON_PLATFORM == LL_ATON_PLAT_EC_TRACE)
+  if (LL_Streng_EncryptionStruct->patch_enable)
+  {
+    ec_trace_add_patch("SE_ENCRYPTION_ID", 32, ATON_STRENG_ENCR_MSB_ID_MSB_MASK >> ATON_STRENG_ENCR_MSB_ID_MSB_LSB);
+    ec_trace_add_patch("SE_ROUNDS", -(int32_t)ATON_STRENG_ENCR_MSB_ROUNDS_LSB,
+                       ATON_STRENG_ENCR_MSB_ROUNDS_MASK >> ATON_STRENG_ENCR_MSB_ROUNDS_LSB);
+    ec_trace_add_patch("SE_KEY_SEL", -(int32_t)ATON_STRENG_ENCR_MSB_KEY_SEL_LSB,
+                       ATON_STRENG_ENCR_MSB_KEY_SEL_MASK >> ATON_STRENG_ENCR_MSB_KEY_SEL_LSB);
+  }
+#endif
+
+  ATON_STRENG_ENCR_MSB_SET(id, t);
+
+  return 0;
+}
+
+/**
  * @brief Configures the Streaming Engine External trigger source
  *        To be used, for example, for configuring synchronization with DCMIPP
  * @param id Streaming engine identifier [0..ATON_STRENG_NUM-1]
@@ -786,7 +994,9 @@ int LL_Streng_ExtSyncInit(int id, LL_Streng_ExtSyncTypedef *conf)
   if (id >= ATON_STRENG_NUM)
     return LL_ATON_INVALID_ID;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_STRENG_CLKB_CLK(id));
+#endif
 
   t = ATON_STRENG_EXTSYNC_DT;
   t = ATON_STRENG_EXTSYNC_SET_EN(t, conf->enable);
@@ -801,8 +1011,34 @@ int LL_Streng_ExtSyncInit(int id, LL_Streng_ExtSyncTypedef *conf)
 #endif
   return 0;
 }
+#endif // ATON_STRENG_NUM
 
-#if defined(ATON_EPOCHCTRL_NUM)
+/**
+ * @brief Configures Bus Interface encryption keys
+ * @param id, Bus Interface identifier [0..ATON_BUSIF_NUM-1]
+ * @param key Selects key to configure [0..ATON_BUSIF_CRYPT_NR_KEYS-1]
+ * @param key_low lowest 64 bits of the key
+ * @param key_hi highest 64 bits of the key
+ */
+int LL_Busif_SetKeys(int id, int key, uint64_t key_low, uint64_t key_hi)
+{
+  LL_ATON_LIB_UNUSED(key_low);
+  LL_ATON_LIB_UNUSED(key_hi);
+
+  if ((id >= ATON_BUSIF_NUM) || (!ATON_BUSIF_ENCRYPTION_EN(id)) || (key >= ATON_BUSIF_CRYPT_NR_KEYS))
+    return LL_ATON_INVALID_ID;
+
+#if defined(ATON_BUSIF_KEY_SET)
+  ATON_BUSIF_KEY_SET(id, key, 0, key_low & 0xffffffff);
+  ATON_BUSIF_KEY_SET(id, key, 1, key_low >> 32);
+  ATON_BUSIF_KEY_SET(id, key, 2, key_hi & 0xffffffff);
+  ATON_BUSIF_KEY_SET(id, key, 3, key_hi >> 32);
+#endif // defined(ATON_BUSIF_KEY_SET)
+
+  return 0;
+}
+
+#ifdef ATON_EPOCHCTRL_NUM
 /**
  * @brief Sets external trigger signal to hi. Used to synchronize with external units, e.g.: HSP
  * @param irq Interrupt line used as trigger signal
@@ -813,8 +1049,14 @@ int LL_TriggerHigh(int irq)
   if (irq >= ATON_INTCTRL_INTS(0))
     return LL_ATON_INVALID_PARAM;
 
+    /* Check if interrupt falls in the hi-register, e.g.: Puma */
+#ifdef ATON_INTCTRL_INTORMSK_H_EPOCHCTRL_0_1_GET_IDX
+  ATON_INTCTRL_INTORMSK_H_SET(0, irq, ~(1 << (ATON_INTCTRL_0_INTORMSK_H_EPOCHCTRL_0_1_IDX - 32)));
+  ATON_INTCTRL_INTSET_H_SET(0, (1 << (ATON_INTCTRL_0_INTSET_H_EPOCHCTRL_0_1_IDX - 32)));
+#else
   ATON_INTCTRL_INTORMSK_SET(0, irq, ~(1 << ATON_INTCTRL_0_INTORMSK_EPOCHCTRL_0_1_IDX));
   ATON_INTCTRL_INTSET_SET(0, (1 << ATON_INTCTRL_0_INTSET_EPOCHCTRL_0_1_IDX));
+#endif
   return 0;
 }
 
@@ -827,149 +1069,161 @@ int LL_TriggerLow(int irq)
 {
   if (irq >= ATON_INTCTRL_INTS(0))
     return LL_ATON_INVALID_PARAM;
-
+#ifdef ATON_INTCTRL_0_INTCLR_H_EPOCHCTRL_0_1_IDX
+  ATON_INTCTRL_INTCLR_H_SET(0, (1 << (ATON_INTCTRL_0_INTCLR_H_EPOCHCTRL_0_1_IDX - 32)));
+#else
   ATON_INTCTRL_INTCLR_SET(0, (1 << ATON_INTCTRL_0_INTCLR_EPOCHCTRL_0_1_IDX));
-  return 0;
-}
 #endif
 
-unsigned __atonn_getSrcPortID(enum SwitchUnitsType sut, unsigned char su_num, enum AccelUnitsType aut,
-                              unsigned char au_num, unsigned char port)
+  return 0;
+}
+#endif // ATONEPOCHCTRL_NUM
+
+unsigned int LL_getSrcPortID(PortType src_port)
 {
   // FIXME
-  LL_ATON_ASSERT(su_num == 0);
-  switch (sut)
+  LL_ATON_ASSERT(src_port.s_num == 0);
+  switch (src_port.s)
   {
   case STRSWITCH:
-    switch (aut)
+#ifdef ATON_STRSWITCH_NUM
+    switch (src_port.u)
     {
-#if defined(ATON_STRENG_NUM)
+#ifdef ATON_STRENG_NUM
     case STRENG:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_STRENG_NUM);
-      return ATONN_CONST_SRCPORT(STRSWITCH, 0, STRENG, 0, 0) + au_num;
+      LL_ATON_ASSERT(src_port.port == 0);
+      LL_ATON_ASSERT(src_port.u_num < ATON_STRENG_NUM);
+      return ATONN_CONST_SRCPORT(STRSWITCH, 0, STRENG, 0, 0) + src_port.u_num;
       break;
-#endif
-#if defined(ATON_CONVACC_NUM)
+#endif // ATON_STRENG_NUM
+#ifdef ATON_CONVACC_NUM
     case CONVACC:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_CONVACC_NUM);
-      return ATONN_CONST_SRCPORT(STRSWITCH, 0, CONVACC, 0, 0) + au_num;
+      LL_ATON_ASSERT(src_port.port == 0);
+      LL_ATON_ASSERT(src_port.u_num < ATON_CONVACC_NUM);
+      return ATONN_CONST_SRCPORT(STRSWITCH, 0, CONVACC, 0, 0) + src_port.u_num;
       break;
-#endif
-#if defined(ATON_DECUN_NUM)
+#endif // ATON_CONVACC_NUM
+#ifdef ATON_DECUN_NUM
     case DECUN:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_DECUN_NUM);
-      return ATONN_CONST_SRCPORT(STRSWITCH, 0, DECUN, 0, 0) + au_num;
+      LL_ATON_ASSERT(src_port.port == 0);
+      LL_ATON_ASSERT(src_port.u_num < ATON_DECUN_NUM);
+      return ATONN_CONST_SRCPORT(STRSWITCH, 0, DECUN, 0, 0) + src_port.u_num;
       break;
-#endif
-#if defined(ATON_ACTIV_NUM)
+#endif // ATON_DECUN_NUM
+#ifdef ATON_ACTIV_NUM
     case ACTIV:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_ACTIV_NUM);
-      return ATONN_CONST_SRCPORT(STRSWITCH, 0, ACTIV, 0, 0) + au_num;
+      LL_ATON_ASSERT(src_port.port == 0);
+      LL_ATON_ASSERT(src_port.u_num < ATON_ACTIV_NUM);
+      return ATONN_CONST_SRCPORT(STRSWITCH, 0, ACTIV, 0, 0) + src_port.u_num;
       break;
-#endif
-#if defined(ATON_ARITH_NUM)
+#endif // ATON_ACTIV_NUM
+#ifdef ATON_ARITH_NUM
     case ARITH:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_ARITH_NUM);
-      return ATONN_CONST_SRCPORT(STRSWITCH, 0, ARITH, 0, 0) + au_num;
+      LL_ATON_ASSERT(src_port.port == 0);
+      LL_ATON_ASSERT(src_port.u_num < ATON_ARITH_NUM);
+      return ATONN_CONST_SRCPORT(STRSWITCH, 0, ARITH, 0, 0) + src_port.u_num;
       break;
-#endif
-#if defined(ATON_POOL_NUM)
+#endif // ATON_ACTIV_NUM
+#ifdef ATON_POOL_NUM
     case POOL:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_POOL_NUM);
-      return ATONN_CONST_SRCPORT(STRSWITCH, 0, POOL, 0, 0) + au_num;
+      LL_ATON_ASSERT(src_port.port == 0);
+      LL_ATON_ASSERT(src_port.u_num < ATON_POOL_NUM);
+      return ATONN_CONST_SRCPORT(STRSWITCH, 0, POOL, 0, 0) + src_port.u_num;
       break;
-#endif
+#endif // ATON_POOL_NUM
     default:
       LL_ATON_ASSERT(0);
       break;
     }
-    break;
-  case STRSWITCH64:
-    // TODO
+#else
     LL_ATON_ASSERT(0);
+#endif
     break;
   case STRSWITCH_VC:
+#ifdef ATON_STRSWITCH_VC_NUM
     // TODO
     LL_ATON_ASSERT(0);
+#else
+    LL_ATON_ASSERT(0);
+#endif
     break;
   }
   return 0;
 }
 
-unsigned __atonn_getDstPortID(enum SwitchUnitsType sut, unsigned char su_num, enum AccelUnitsType aut,
-                              unsigned char au_num, unsigned char port)
+unsigned int LL_getDstPortID(PortType dst_port)
 {
   // FIXME
-  LL_ATON_ASSERT(su_num == 0);
-  switch (sut)
+  LL_ATON_ASSERT(dst_port.s_num == 0);
+  switch (dst_port.s)
   {
   case STRSWITCH:
-    switch (aut)
+#ifdef ATON_STRSWITCH_NUM
+    switch (dst_port.u)
     {
-#if defined(ATON_STRENG_NUM)
+#ifdef ATON_STRENG_NUM
     case STRENG:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_STRENG_NUM);
-      return ATONN_CONST_DSTPORT(STRSWITCH, 0, STRENG, 0, 0) + (0x4 * au_num);
+      LL_ATON_ASSERT(dst_port.port == 0);
+      LL_ATON_ASSERT(dst_port.u_num < ATON_STRENG_NUM);
+      return ATONN_CONST_DSTPORT(STRSWITCH, 0, STRENG, 0, 0) + (0x4 * dst_port.u_num);
       break;
-#endif
-#if defined(ATON_CONVACC_NUM)
+#endif // ATON_STRENG_NUM
+#ifdef ATON_CONVACC_NUM
     case CONVACC:
-      LL_ATON_ASSERT(port < 3);
-      LL_ATON_ASSERT(au_num < ATON_CONVACC_NUM);
-      return ATONN_CONST_DSTPORT(STRSWITCH, 0, CONVACC, 0, 0) + (0x4 * (3 * au_num + port));
+      LL_ATON_ASSERT(dst_port.port < 3);
+      LL_ATON_ASSERT(dst_port.u_num < ATON_CONVACC_NUM);
+      return ATONN_CONST_DSTPORT(STRSWITCH, 0, CONVACC, 0, 0) + (0x4 * (3 * dst_port.u_num + dst_port.port));
       break;
-#endif
-#if defined(ATON_DECUN_NUM)
+#endif // ATON_CONVACC_NUM
+#ifdef ATON_DECUN_NUM
     case DECUN:
-      LL_ATON_ASSERT(port < 2);
-      LL_ATON_ASSERT(au_num < ATON_DECUN_NUM);
-      return ATONN_CONST_DSTPORT(STRSWITCH, 0, DECUN, 0, 0) + (0x4 * (2 * au_num + port));
+      LL_ATON_ASSERT(dst_port.port < 2);
+      LL_ATON_ASSERT(dst_port.u_num < ATON_DECUN_NUM);
+      return ATONN_CONST_DSTPORT(STRSWITCH, 0, DECUN, 0, 0) + (0x4 * (2 * dst_port.u_num + dst_port.port));
       break;
-#endif
-#if defined(ATON_ACTIV_NUM)
+#endif // ATON_DECUN_NUM
+#ifdef ATON_ACTIV_NUM
     case ACTIV:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_ACTIV_NUM);
-      return ATONN_CONST_DSTPORT(STRSWITCH, 0, ACTIV, 0, 0) + (0x4 * au_num);
+      LL_ATON_ASSERT(dst_port.port == 0);
+      LL_ATON_ASSERT(dst_port.u_num < ATON_ACTIV_NUM);
+      return ATONN_CONST_DSTPORT(STRSWITCH, 0, ACTIV, 0, 0) + (0x4 * dst_port.u_num);
       break;
-#endif
-#if defined(ATON_ARITH_NUM)
+#endif // ATON_ACTIV_NUM
+#ifdef ATON_ARITH_NUM
     case ARITH:
-      LL_ATON_ASSERT(port < 2);
-      LL_ATON_ASSERT(au_num < ATON_ARITH_NUM);
-      return ATONN_CONST_DSTPORT(STRSWITCH, 0, ARITH, 0, 0) + (0x4 * (2 * au_num + port));
+      LL_ATON_ASSERT(dst_port.port < 2);
+      LL_ATON_ASSERT(dst_port.u_num < ATON_ARITH_NUM);
+      return ATONN_CONST_DSTPORT(STRSWITCH, 0, ARITH, 0, 0) + (0x4 * (2 * dst_port.u_num + dst_port.port));
       break;
-#endif
-#if defined(ATON_POOL_NUM)
+#endif // ATON_ARITH_NUM
+#ifdef ATON_POOL_NUM
     case POOL:
-      LL_ATON_ASSERT(port == 0);
-      LL_ATON_ASSERT(au_num < ATON_POOL_NUM);
-      return ATONN_CONST_DSTPORT(STRSWITCH, 0, POOL, 0, 0) + (0x4 * au_num);
+      LL_ATON_ASSERT(dst_port.port == 0);
+      LL_ATON_ASSERT(dst_port.u_num < ATON_POOL_NUM);
+      return ATONN_CONST_DSTPORT(STRSWITCH, 0, POOL, 0, 0) + (0x4 * dst_port.u_num);
       break;
-#endif
+#endif // ATON_POOL_NUM
     default:
       LL_ATON_ASSERT(0);
       break;
     }
-    break;
-  case STRSWITCH64:
-    // TODO
+#else
     LL_ATON_ASSERT(0);
+#endif
     break;
   case STRSWITCH_VC:
+#ifdef ATON_STRSWITCH_VC_NUM
     // TODO
     LL_ATON_ASSERT(0);
+#else
+    LL_ATON_ASSERT(0);
+#endif
     break;
   }
   return 0;
 }
+
+#ifdef ATON_STRSWITCH_NUM
 
 /**
  * @brief  Connects input and output port(s) on the streaming switch (without clearing configuration)
@@ -987,18 +1241,13 @@ int LL_Switch_Init_NoReset(const LL_Switch_InitTypeDef *LL_Switch_InitStruct, in
   unsigned int fnr_shift[ATON_SWITCH_CONTEXT_NUM] = {ATON_STRSWITCH_DST_FNR0_LSB, ATON_STRSWITCH_DST_FNR1_LSB};
   unsigned int fnr_mask[ATON_SWITCH_CONTEXT_NUM] = {ATON_STRSWITCH_DST_FNR0_MASK, ATON_STRSWITCH_DST_FNR1_MASK};
 
-  /* Enable Switch */
-  t = ATON_STRSWITCH_CTRL_DT;
-  t = ATON_STRSWITCH_CTRL_SET_EN(t, 1);
-  ATON_STRSWITCH_CTRL_SET(0, t);
-
   for (i = 0; i < n; i++)
   {
     /* Compute target destination configuration register */
     reg = (uint32_t *)(ATON_STRSWITCH_BASE(0) + ATONN_DSTPORT_ID(LL_Switch_InitStruct[i].dest));
     t = 0;
     /* Enable Context and create link */
-#if ATON_SWITCH_CONTEXT_NUM == 2
+#if (LL_ATON_PLATFORM != LL_ATON_PLAT_EC_TRACE) && (ATON_SWITCH_CONTEXT_NUM == 2)
     t |= ((LL_Switch_InitStruct[i].context0 != 0) << en_shift[0]);
     t |= (ATONN_SRCPORT_ID(LL_Switch_InitStruct[i].source0) << link_shift[0]);
     t |= ((LL_Switch_InitStruct[i].frames0 << fnr_shift[0]) & fnr_mask[0]);
@@ -1018,6 +1267,11 @@ int LL_Switch_Init_NoReset(const LL_Switch_InitTypeDef *LL_Switch_InitStruct, in
     ATON_REG_WRITE(reg, t);
   }
 
+  /* enable the Stream Switch */
+  t = ATON_STRSWITCH_CTRL_DT;
+  t = ATON_STRSWITCH_CTRL_SET_EN(t, 1);
+  ATON_STRSWITCH_CTRL_SET(0, t);
+
   return 0;
 }
 
@@ -1029,14 +1283,9 @@ int LL_Switch_Init_NoReset(const LL_Switch_InitTypeDef *LL_Switch_InitStruct, in
  */
 int LL_Switch_Init(const LL_Switch_InitTypeDef *LL_Switch_InitStruct, int n)
 {
-  uint32_t t;
-
 #if (LL_ATON_PLATFORM == LL_ATON_PLAT_EC_TRACE)
   ll_aton_static_checks();
 #endif
-
-  /* Clear Configuration */
-  ATON_DISABLE_CLR_CONFCLR(STRSWITCH, 0);
 
   return LL_Switch_Init_NoReset(LL_Switch_InitStruct, n);
 }
@@ -1049,17 +1298,14 @@ int LL_Switch_Init(const LL_Switch_InitTypeDef *LL_Switch_InitStruct, int n)
  */
 int LL_Switch_Deinit(const LL_Switch_InitTypeDef *LL_Switch_InitStruct, int n)
 {
-  int i;
-  volatile uint32_t *reg;
+  LL_ATON_LIB_UNUSED(LL_Switch_InitStruct);
+  LL_ATON_LIB_UNUSED(n);
 
-  for (i = 0; i < n; i++)
-  {
-    /* Compute target destination configuration register */
-    reg = (uint32_t *)(ATON_STRSWITCH_BASE(0) + ATONN_DSTPORT_ID(LL_Switch_InitStruct[i].dest));
+  uint32_t t;
 
-    /* Disable contexts */
-    ATON_REG_WRITE(reg, 0);
-  }
+  /* Clear Configuration */
+  ATON_DISABLE_CLR(STRSWITCH, 0);
+  ATON_DISABLE_CONFCLR(STRSWITCH, 0);
 
   return 0;
 }
@@ -1076,6 +1322,12 @@ int LL_Switch_Deinit_Fine_Grained(const LL_Switch_InitTypeDef *LL_Switch_InitStr
   volatile uint32_t *reg;
   unsigned int en_shift[ATON_SWITCH_CONTEXT_NUM] = {ATON_STRSWITCH_DST_EN0_LSB, ATON_STRSWITCH_DST_EN1_LSB};
 
+  uint32_t t;
+
+  /* Clear Configuration */
+  ATON_DISABLE_CLR(STRSWITCH, 0);
+  ATON_DISABLE_CONFCLR(STRSWITCH, 0);
+
   for (i = 0; i < n; i++)
   {
     /* Compute target destination configuration register */
@@ -1083,7 +1335,7 @@ int LL_Switch_Deinit_Fine_Grained(const LL_Switch_InitTypeDef *LL_Switch_InitStr
 
     /* Disable context */
     uint32_t t = *reg;
-#if ATON_SWITCH_CONTEXT_NUM == 2
+#if (LL_ATON_PLATFORM != LL_ATON_PLAT_EC_TRACE) && (ATON_SWITCH_CONTEXT_NUM == 2)
     t &= ~((LL_Switch_InitStruct[i].context0 != 0) << en_shift[0]);
     t &= ~((LL_Switch_InitStruct[i].context1 != 0) << en_shift[1]);
 #else
@@ -1096,6 +1348,7 @@ int LL_Switch_Deinit_Fine_Grained(const LL_Switch_InitTypeDef *LL_Switch_InitStr
 
   return 0;
 }
+#endif // ATON_STRSWITCH_NUM
 
 #ifdef ATON_STRSWITCH_VC_NUM
 
@@ -1114,11 +1367,6 @@ int LL_SwitchVC_Init_NoReset(const LL_SwitchVC_InitTypeDef *LL_SwitchVC_InitStru
   unsigned int en_shift = ATON_STRSWITCH_VC_DST_EN_LSB;
   unsigned int src_shift = ATON_STRSWITCH_VC_DST_SRC_LSB;
 
-  /* Enable Switch */
-  t = ATON_STRSWITCH_VC_CTRL_DT;
-  t = ATON_STRSWITCH_VC_CTRL_SET_EN(t, 1);
-  ATON_STRSWITCH_VC_CTRL_SET(0, t);
-
   for (i = 0; i < n; i++)
   {
     /* Compute target destination configuration register */
@@ -1129,6 +1377,11 @@ int LL_SwitchVC_Init_NoReset(const LL_SwitchVC_InitTypeDef *LL_SwitchVC_InitStru
     t |= (ATONN_SRCPORT_ID(LL_SwitchVC_InitStruct[i].source) << src_shift);
     ATON_REG_WRITE(reg, t);
   }
+
+  /* Enable Switch */
+  t = ATON_STRSWITCH_VC_CTRL_DT;
+  t = ATON_STRSWITCH_VC_CTRL_SET_EN(t, 1);
+  ATON_STRSWITCH_VC_CTRL_SET(0, t);
 
   return 0;
 }
@@ -1142,11 +1395,6 @@ int LL_SwitchVC_Init_NoReset(const LL_SwitchVC_InitTypeDef *LL_SwitchVC_InitStru
  */
 int LL_SwitchVC_Init(const LL_SwitchVC_InitTypeDef *LL_SwitchVC_InitStruct, int n)
 {
-  uint32_t t;
-
-  /* Clear Configuration */
-  ATON_DISABLE_CLR_CONFCLR(STRSWITCH_VC, 0);
-
   return LL_SwitchVC_Init_NoReset(LL_SwitchVC_InitStruct, n);
 }
 
@@ -1160,6 +1408,12 @@ int LL_SwitchVC_Deinit(const LL_SwitchVC_InitTypeDef *LL_SwitchVC_InitStruct, in
 {
   int i;
   volatile uint32_t *reg;
+
+  uint32_t t;
+
+  /* Clear Configuration */
+  ATON_DISABLE_CLR(STRSWITCH_VC, 0);
+  ATON_DISABLE_CONFCLR(STRSWITCH_VC, 0);
 
   for (i = 0; i < n; i++)
   {
@@ -1184,6 +1438,12 @@ int LL_SwitchVC_Deinit_Fine_Grained(const LL_SwitchVC_InitTypeDef *LL_SwitchVC_I
   int i;
   volatile uint32_t *reg;
   unsigned int en_shift = ATON_STRSWITCH_VC_DST_EN_LSB;
+
+  uint32_t t;
+
+  /* Clear Configuration */
+  ATON_DISABLE_CLR(STRSWITCH_VC, 0);
+  ATON_DISABLE_CONFCLR(STRSWITCH_VC, 0);
 
   for (i = 0; i < n; i++)
   {
@@ -1213,9 +1473,9 @@ static inline uint32_t decun_inc_page_addr(int id, uint32_t ctrl_val)
 
 static void LL_Decun_CB_1byte(int id, const LL_Decun_InitTypeDef *conf, uint32_t ctrl_val)
 {
-  unsigned CBsize = conf->CBs_size;
-  unsigned i, k;
-  unsigned mem_idx_num = ATON_DECUN_MEM_LOW_IDX_MAX - ATON_DECUN_MEM_LOW_IDX_MIN + 1;
+  int CBsize = conf->CBs_size;
+  int i, k;
+  int mem_idx_num = ATON_DECUN_MEM_LOW_IDX_MAX - ATON_DECUN_MEM_LOW_IDX_MIN + 1;
 
   if (conf->nCWperCV == 1)
   {
@@ -1368,9 +1628,9 @@ static void LL_Decun_CB_1byte(int id, const LL_Decun_InitTypeDef *conf, uint32_t
 
 static void LL_Decun_CB_2byte(int id, const LL_Decun_InitTypeDef *conf, uint32_t ctrl_val)
 {
-  unsigned CBsize = conf->CBs_size / 2;
-  unsigned i, k;
-  unsigned mem_idx_num = ATON_DECUN_MEM_LOW_IDX_MAX - ATON_DECUN_MEM_LOW_IDX_MIN + 1;
+  int CBsize = conf->CBs_size / 2;
+  int i, k;
+  int mem_idx_num = ATON_DECUN_MEM_LOW_IDX_MAX - ATON_DECUN_MEM_LOW_IDX_MIN + 1;
 
   if (conf->nCWperCV == 1)
   {
@@ -1570,7 +1830,9 @@ int LL_Decun_Init(int id, const LL_Decun_InitTypeDef *conf)
   if (id >= ATON_DECUN_NUM)
     return LL_ATON_INVALID_ID;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_DECUN_CLKB_CLK(id));
+#endif
 
   t = ATON_DECUN_CTRL_DT;
   t = ATON_DECUN_CTRL_SET_DUALIN(t, (conf->noDualInput != 0));
@@ -1624,7 +1886,9 @@ int LL_Convacc_Init(int id, const LL_Convacc_InitTypeDef *conf)
   if (id >= ATON_CONVACC_NUM)
     return LL_ATON_INVALID_ID;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_CONVACC_CLKB_CLK(id));
+#endif
 
   t = ATON_CONVACC_CTRL_DT;
   t = ATON_CONVACC_CTRL_SET_NOSUM(t, (conf->accumulate == 0));
@@ -1854,7 +2118,7 @@ static int32_t get_Activacc_type(LL_Activacc_Op op)
     return ATON_ACTIVTYPE_TRELU;
   case ACTIV_FUNC:
     return ATON_ACTIVTYPE_FUNCTION;
-#if defined ATON_ACTIVTYPE_LUT
+#if defined(ATON_ACTIVTYPE_LUT)
   case ACTIV_LUT:
     return ATON_ACTIVTYPE_LUT;
 #endif
@@ -1878,7 +2142,9 @@ int LL_Activacc_Init(int id, const LL_Activacc_InitTypeDef *conf)
   if (id >= ATON_ACTIV_NUM)
     return LL_ATON_INVALID_ID;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_ACTIV_CLKB_CLK(id));
+#endif
 
   t = ATON_ACTIV_CTRL_DT;
   t = ATON_ACTIV_CTRL_SET_TYPE(t, get_Activacc_type(conf->operation));
@@ -1939,7 +2205,7 @@ int LL_Activacc_Init(int id, const LL_Activacc_InitTypeDef *conf)
 
     {
       uint8_t *R0p = (uint8_t *)conf->ROM0_vector.p;
-      unsigned ROM0_rows = conf->ROM0_nbytes / (1 * 1);
+      int ROM0_rows = conf->ROM0_nbytes / (1 * 1);
       for (int i = 0; i < ROM0_rows; i++)
       {
         t = ATON_ACTIV_ROM0_DT;
@@ -1949,7 +2215,7 @@ int LL_Activacc_Init(int id, const LL_Activacc_InitTypeDef *conf)
     }
     {
       uint16_t *R1p = (uint16_t *)conf->ROM1_vector.p;
-      unsigned ROM1_rows = conf->ROM1_nbytes / (3 * 2);
+      int ROM1_rows = conf->ROM1_nbytes / (3 * 2);
       for (int i = 0; i < ROM1_rows; i++)
       {
         t = ATON_ACTIV_ROM1_AB_DT;
@@ -1964,7 +2230,7 @@ int LL_Activacc_Init(int id, const LL_Activacc_InitTypeDef *conf)
   }
   break;
   case ACTIV_LUT:
-#if defined ATON_ACTIVTYPE_LUT
+#if defined(ATON_ACTIVTYPE_LUT)
   {
     uint8_t *Lutp = (uint8_t *)conf->LUT_vector.p;
     for (int i = 0; i < 64; i++)
@@ -2054,7 +2320,9 @@ int LL_Arithacc_Init(int id, const LL_Arithacc_InitTypeDef *conf)
   else
     sshift = 0;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_ARITH_CLKB_CLK(id));
+#endif
 
   t = ATON_ARITH_CTRL_DT;
   ATON_ARITH_CTRL_SET(id, t);
@@ -2233,7 +2501,7 @@ int LL_Arithacc_Init(int id, const LL_Arithacc_InitTypeDef *conf)
 
     int32_t c_sign = (conf->C_scalar == -1 ? -1 : 1);
 #if (LL_ATON_PLATFORM == LL_ATON_PLAT_EC_TRACE)
-    ec_trace_comment("Block ECASM optimizations to move reg writes pass this point");
+    ec_trace_comment("Block ECASM write optimizations at this point");
 #endif
     ATON_ARITH_TRANSLATEADDR_SET(id, 1); // map 0x400 onto 0x0 offset for coefficients
     for (i = 0, k = 0; i < maxc; i++, k++)
@@ -2251,7 +2519,7 @@ int LL_Arithacc_Init(int id, const LL_Arithacc_InitTypeDef *conf)
       if (k == mem_idx_num)
       {
 #if (LL_ATON_PLATFORM == LL_ATON_PLAT_EC_TRACE)
-        ec_trace_comment("Block ECASM optimizations to move reg writes pass this point");
+        ec_trace_comment("Block ECASM write optimizations at this point");
 #endif
         ATON_ARITH_TRANSLATEADDR_SET(id, 0); // map 0xC00 onto 0xC00 offset for coefficients
         k -= (256 / 2);
@@ -2311,16 +2579,9 @@ int LL_Poolacc_Init(int id, const LL_Poolacc_InitTypeDef *conf)
   if (id >= ATON_POOL_NUM)
     return LL_ATON_INVALID_ID;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_POOL_CLKB_CLK(id));
-
-#ifdef POOL_RC14
-  /* Clear pipeline */
-  t = ATON_POOL_CTRL_GET(id);
-  t = ATON_POOL_CTRL_SET_EN(t, 0);
-  t = ATON_POOL_CTRL_SET_CLR(t, 1);
-  t = ATON_POOL_CTRL_SET_CONFCLR(t, 1);
-  ATON_POOL_CTRL_SET(id, t);
-#endif // POOL_RC14
+#endif
 
   /* Initialize CTRL register parameters */
   t = ATON_POOL_CTRL_DT;
@@ -2427,7 +2688,7 @@ int LL_Poolacc_Init(int id, const LL_Poolacc_InitTypeDef *conf)
 }
 #endif // ATON_POOL_NUM
 
-#if defined(ATON_EPOCHCTRL_NUM)
+#ifdef ATON_EPOCHCTRL_NUM
 /**
  * @brief  Configure Epoch Controller
  * @param  id Epoch Controller identifier [0..ATON_EPOCHCTRL_NUM-1]
@@ -2441,7 +2702,9 @@ int LL_EpochCtrl_Init(int id, const LL_EpochCtrl_InitTypeDef *conf)
   if (id >= ATON_EPOCHCTRL_NUM)
     return LL_ATON_INVALID_ID;
 
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   LL_ATON_EnableClock(ATON_EPOCHCTRL_CLKB_CLK(id));
+#endif
 
   /* Configure CTRL register */
   t = ATON_EPOCHCTRL_CTRL_DT;
@@ -2455,6 +2718,35 @@ int LL_EpochCtrl_Init(int id, const LL_EpochCtrl_InitTypeDef *conf)
   ATON_EPOCHCTRL_ADDR_SET(id, conf->blobaddr);
 
   return LL_ATON_OK;
+}
+
+/**
+ * @brief Configures Epoch Controller Encryption support
+ * @param id Epoch Controller identifier [0..ATON_EPOCHCTRL_NUM-1]
+ * @param conf Pointer to LL_Streng_EncryptionTypedef structure describing Encryption parameters
+ * @retval Error code
+ * @note Encryption configuration structure is the same as the Stream Engine one
+ * @note Encryption keys are set in the Epoch Controller's Bus Interface using LL_Busif_SetKeys function
+ * @note Epoch Controller Bus Interface ID is ATON_BUSIF_NUM-1
+ */
+int LL_EpochCtrl_EncryptionInit(int id, const LL_Streng_EncryptionTypedef *conf)
+{
+  uint32_t t;
+
+  if ((id >= ATON_EPOCHCTRL_NUM) || (!ATON_EPOCHCTRL_ENCRYPTION_EN(id)))
+    return LL_ATON_INVALID_ID;
+
+  t = conf->encryption_id & 0xffffffff;
+  ATON_EPOCHCTRL_ENCR_LSB_SET(id, t);
+
+  t = ATON_EPOCHCTRL_ENCR_MSB_DT;
+  t = ATON_EPOCHCTRL_ENCR_MSB_SET_ID_MSB(t, (conf->encryption_id >> 32) & 0x7ff);
+  t = ATON_EPOCHCTRL_ENCR_MSB_SET_EN(t, conf->enable);
+  t = ATON_EPOCHCTRL_ENCR_MSB_SET_ROUNDS(t, conf->rounds);
+  t = ATON_EPOCHCTRL_ENCR_MSB_SET_KEY_SEL(t, conf->key_sel);
+  ATON_EPOCHCTRL_ENCR_MSB_SET(id, t);
+
+  return 0;
 }
 
 /**
@@ -2510,14 +2802,85 @@ int LL_EpochCtrl_Wait(uint32_t mask)
  */
 unsigned int LL_EpochCtrl_GetBlobSize(uint32_t *eb_addr)
 {
-  unsigned bloblines = eb_addr[1] + 2;
+  unsigned int bloblines = eb_addr[1] + 2;
   return bloblines * 4;
 }
 #endif // ATON_EPOCHCTRL_NUM
 
+#ifdef ATON_BUSIF_MMU_ENTRIES
+/**
+ * @brief  Configure Bus Interface Mini MMU
+ * @param  id Bus Interface identifier [0..ATON_BUSIF_NUM-1]
+ * @param  conf Pointer to an array of structures describing MiniMMU initialization parameters. One entry per region
+ * @param  count Number of regions to configure
+ * @retval Error code
+ */
+int LL_MiniMmu_Init(int id, const LL_MiniMmu_InitTypeDef *conf, unsigned int count)
+{
+  uint32_t t;
+  int entry;
+
+  if (ATON_BUSIF_BUSPORTI_NR_EXISTS(id) == false)
+    return LL_ATON_INVALID_PARAM;
+
+  for (unsigned int i = 0; i < count; i++)
+  {
+    /* Check parameters */
+    entry = conf[i].entry;
+    if (entry >= (int)ATON_BUSIF_MMU_ENTRIES(id))
+      return LL_ATON_INVALID_PARAM;
+
+    /* Set Control Register */
+    t = ATON_BUSIF_MMU_VIRT_CTRL_GET(id, entry);
+    t = ATON_BUSIF_MMU_VIRT_CTRL_SET_REN(t, conf[i].ren);
+    t = ATON_BUSIF_MMU_VIRT_CTRL_SET_WEN(t, conf[i].wen);
+    ATON_BUSIF_MMU_VIRT_CTRL_SET(id, entry, t);
+
+    /* Set Addresses */
+    ATON_BUSIF_MMU_VIRT_START_SET(id, entry, conf[i].start.i);
+    ATON_BUSIF_MMU_VIRT_END_SET(id, entry, conf[i].end.i);
+    ATON_BUSIF_MMU_PHY_BASE_SET(id, entry, conf[i].base.i);
+  }
+
+  return LL_ATON_OK;
+}
+#endif // ATON_BUSIF_MMU_ENTRIES
+
+void LL_ATON_EnableAllClocks(void)
+{
+  ATON_CLKCTRL_AGATES0_SET(0, 0xffffffff);
+  ATON_CLKCTRL_AGATES1_SET(0, 0xffffffff);
+
+#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
+
+  ATON_CLKCTRL_BGATES_SET(0, 0x0);
+#ifdef ATON_CLKCTRL_BGATES1_OFFSET
+  ATON_CLKCTRL_BGATES1_SET(0, 0x0);
+#endif
+
+#else
+
+  ATON_CLKCTRL_BGATES_SET(0, 0xffffffff);
+#ifdef ATON_CLKCTRL_BGATES1_OFFSET
+  ATON_CLKCTRL_BGATES1_SET(0, 0xffffffff);
+#endif
+
+#endif
+}
+
+void LL_ATON_DisableAllClocks(void)
+{
+  ATON_CLKCTRL_AGATES0_SET(0, 0x0);
+  ATON_CLKCTRL_AGATES1_SET(0, 0x0);
+
+  ATON_CLKCTRL_BGATES_SET(0, 0x0);
+#ifdef ATON_CLKCTRL_BGATES1_OFFSET
+  ATON_CLKCTRL_BGATES1_SET(0, 0x0);
+#endif
+}
+
 void LL_ATON_EnableClock(unsigned int clock)
 {
-#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   if (clock <= 31)
   {
     ATON_REG_WRITE_FIELD_RANGE(CLKCTRL, 0, BGATES, clock, 1, 1);
@@ -2529,12 +2892,10 @@ void LL_ATON_EnableClock(unsigned int clock)
     ATON_REG_WRITE_FIELD_RANGE(CLKCTRL, 0, BGATES1, clock, 1, 1);
   }
 #endif
-#endif
 }
 
 void LL_ATON_DisableClock(unsigned int clock)
 {
-#if (LL_ATON_ENABLE_CLOCK_GATING == 1)
   if (clock <= 31)
   {
     ATON_REG_WRITE_FIELD_RANGE(CLKCTRL, 0, BGATES, clock, 1, 0);
@@ -2546,9 +2907,9 @@ void LL_ATON_DisableClock(unsigned int clock)
     ATON_REG_WRITE_FIELD_RANGE(CLKCTRL, 0, BGATES1, clock, 1, 0);
   }
 #endif
-#endif
 }
 
+#ifdef ATON_STRENG_NUM
 /**
  * @brief  DMA version of a memcpy functionality, this function could be overloaded if a system DMA could be used
  * @param  dst destination memory address
@@ -2652,33 +3013,35 @@ LL_ATON_WEAK void *LL_ATON_Dma_memcpy(void *dst, void *src, void *src_limit, siz
       dma_out.cache_allocate = 1;
     }
 
-    const LL_Switch_InitTypeDef switch_init = {LL_Switch_Init_Dest() = ATONN_DSTPORT(STRSWITCH, 0, STRENG, 1, 0),
-                                               LL_Switch_Init_Source(0) = ATONN_SRCPORT(STRSWITCH, 0, STRENG, 0, 0),
-                                               LL_Switch_Init_Context(0) = 1, LL_Switch_Init_Frames(0) = 0};
+    const LL_Switch_InitTypeDef __ll_switch_init = {LL_Switch_Init_Dest() = ATONN_DSTPORT(STRSWITCH, 0, STRENG, 1, 0),
+                                                    LL_Switch_Init_Source(0) =
+                                                        ATONN_SRCPORT(STRSWITCH, 0, STRENG, 0, 0),
+                                                    LL_Switch_Init_Context(0) = 1, LL_Switch_Init_Frames(0) = 0};
     const LL_ATON_EnableUnits_InitTypeDef dma_units[] = {{{STRENG, 1}}, {{STRENG, 0}}};
     const uint32_t dma_wait_mask = 0x2;
 
     LL_Streng_TensorInit(0, &dma_in, 1);
     LL_Streng_TensorInit(1, &dma_out, 1);
-    LL_Switch_Init(&switch_init, 1);
+    LL_Switch_Init(&__ll_switch_init, 1);
     LL_ATON_EnableUnits_Init(dma_units, 2);
     LL_Streng_Wait(dma_wait_mask);
-    LL_ATON_DisableUnits_Init(dma_units, 1);
-    LL_Switch_Deinit(&switch_init, 1);
+    LL_ATON_DisableUnits_Init(dma_units, 2);
+    LL_Switch_Deinit(&__ll_switch_init, 1);
   }
 
   return dst;
 }
+#endif // ATON_STRENG_NUM
 
 #if (LL_ATON_PLATFORM == LL_ATON_PLAT_EC_TRACE)
 static void *ec_aton_base;
 
-uintptr_t get_ec_aton_base(void)
+uintptr_t ec_trace_get_aton_base(void)
 {
   return (uintptr_t)ec_aton_base;
 }
 
-void initialize_ec_aton_base(void)
+void ec_trace_initialize_aton_base(void)
 {
   ec_aton_base = malloc(ATON_ADDR_SPACE_SIZE);
 }
@@ -2714,13 +3077,16 @@ unsigned int ec_trace_get_REG_id(unsigned int regoffset)
 void ec_trace_wait_epoch_end(uint32_t wait_mask)
 {
   // TODO: Only polling mode supported at the moment
-  for (unsigned i = 0; i < 32; i++)
+  LL_ATON_LIB_UNUSED(wait_mask);
+#ifdef ATON_STRENG_NUM
+  for (unsigned int i = 0; i < 32; i++)
   {
     if (wait_mask & (1 << i))
     {
       ATON_REG_POLL(STRENG, i, CTRL, RUNNING, 0);
     }
   }
+#endif // ATON_STRENG_NUM
 }
 
 #endif

@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiValidation_ATON.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI Validation application (entry points) - ATON/NPU runtime
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2023, 2024 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -157,6 +157,8 @@ struct aton_context {
 
 static char _print_buffer[_PRINT_BUFFER_SIZE];
 
+void _print_debug(bool debug, const char* fmt, ...);
+
 void _print_debug(bool debug, const char* fmt, ...)
 {
   va_list ap;
@@ -166,13 +168,14 @@ void _print_debug(bool debug, const char* fmt, ...)
     return;
 
   va_start(ap, fmt);
-  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE, fmt, ap);
+  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE - 1, fmt, ap);
   va_end(ap);
   while (s) {
     if ((_print_buffer[s] == '\n') || (_print_buffer[s] == '\r'))
       _print_buffer[s] = 0;
     s--;
   }
+  _print_buffer[_PRINT_BUFFER_SIZE - 1] = 0;
   aiPbMgrSendLogV2(EnumState_S_WAITING, 1, &_print_buffer[0]);
 }
 
@@ -325,9 +328,6 @@ static uint32_t _stai_compiler_id_to(stai_compiler_id id)
   }
   else if  (id == STAI_COMPILER_ID_HIGHTECH) {
     return EnumTools_AI_HTC;
-  }
-  else if  (id == STAI_COMPILER_ID_GCC) {
-    return EnumTools_AI_GCC;
   }
   else if  (id == STAI_COMPILER_ID_IAR) {
     return EnumTools_AI_IAR;
@@ -1396,6 +1396,9 @@ int aiValidationProcess(void)
       EnumVersion_P_VERSION_MINOR);
 
   aiPbMgrInit(pbCmdFuncTab);
+
+  /* used only by Stellar MCUs, empty for all other MCUs */
+  port_io_init();
 
   do {
     r = aiPbMgrWaitAndProcess();

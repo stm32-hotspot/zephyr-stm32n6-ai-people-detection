@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiTestUtility.h
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Utility functions for AI test applications
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -41,7 +41,7 @@ extern "C" {
 
 #elif defined(_IS_GCC_COMPILER) && _IS_GCC_COMPILER
 
-#if !defined(SR6X)
+#if !defined(SR6X) &&  !defined(STM32MP21xxxx)
 #define _APP_STACK_MONITOR_ 1
 #define _APP_HEAP_MONITOR_  1
 #else
@@ -435,7 +435,7 @@ bool ioRawReadBuffer(uint8_t *buff, int count);
  * -----------------------------------------------------------------------------
  */
 
-#if !defined(SR6X)
+#if !defined(SR6X) && !defined(STM32MP21xxxx)
 __STATIC_INLINE uint32_t disableInts(void)
 {
   uint32_t state;

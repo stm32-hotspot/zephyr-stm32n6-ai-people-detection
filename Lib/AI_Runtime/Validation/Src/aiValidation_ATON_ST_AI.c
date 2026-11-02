@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiValidation_ATON.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI Validation application (entry points) - ATON/NPU runtime
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2023, 2024 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -92,7 +92,7 @@
 #include <stm32msg.pb.h>
 
 #include "ai_wrapper_ATON.h"
-#include "mcu_cache.h"
+#include "ll_aton_caches_interface.h"
 
 #define _AI_RUNTIME_ID EnumAiRuntime_AI_RT_ATONN
 
@@ -147,9 +147,16 @@ struct aton_context {
  * -----------------------------------------------------------------------------
  */
 
+#if defined(HAS_DEDICATED_PRINT_PORT) && HAS_DEDICATED_PRINT_PORT == 1
+#define PB_LC_PRINT(debug, fmt, ...) LC_PRINT(fmt, ##__VA_ARGS__)
+#define PB_LC_STAT(_cat, _sub_cat, fmt, ...) LC_PRINT("s:" _cat ":" _sub_cat ":" fmt, ##__VA_ARGS__)
+#else
+
 #define _PRINT_BUFFER_SIZE  160
 
 static char _print_buffer[_PRINT_BUFFER_SIZE];
+
+void _print_debug(bool debug, const char* fmt, ...);
 
 void _print_debug(bool debug, const char* fmt, ...)
 {
@@ -160,18 +167,20 @@ void _print_debug(bool debug, const char* fmt, ...)
     return;
 
   va_start(ap, fmt);
-  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE, fmt, ap);
+  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE - 1, fmt, ap);
   va_end(ap);
   while (s) {
     if ((_print_buffer[s] == '\n') || (_print_buffer[s] == '\r'))
       _print_buffer[s] = 0;
     s--;
   }
+  _print_buffer[_PRINT_BUFFER_SIZE - 1] = 0;
   aiPbMgrSendLogV2(EnumState_S_WAITING, 1, &_print_buffer[0]);
 }
 
 #define PB_LC_PRINT(debug, fmt, ...)         _print_debug(debug, fmt, ##__VA_ARGS__)
 #define PB_LC_STAT(_cat, _sub_cat, fmt, ...) _print_debug(true, "s:" _cat ":" _sub_cat ":" fmt "\r\n", ##__VA_ARGS__)
+#endif
 
 
 /* -----------------------------------------------------------------------------
@@ -318,9 +327,6 @@ static uint32_t _stai_compiler_id_to(stai_compiler_id id)
   }
   else if  (id == STAI_COMPILER_ID_HIGHTECH) {
     return EnumTools_AI_HTC;
-  }
-  else if  (id == STAI_COMPILER_ID_GCC) {
-    return EnumTools_AI_GCC;
   }
   else if  (id == STAI_COMPILER_ID_IAR) {
     return EnumTools_AI_IAR;
@@ -1006,7 +1012,7 @@ void npu_dump_tensors_cb(stai_event_type event_id, const int16_t cidx,
     if (_buffer_is_filtered(ctx, aton_buf))
         tens_flags |= EnumTensorFlag_TENSOR_FLAG_NO_DATA;
     else
-        mcu_cache_clean_invalidate_range((uint32_t)LL_Buffer_addr_start(aton_buf), (uint32_t)LL_Buffer_addr_end(aton_buf));
+        LL_ATON_Cache_MCU_Clean_Invalidate_Range((uint32_t)LL_Buffer_addr_start(aton_buf), (uint32_t)LL_Buffer_addr_end(aton_buf));
 
     if (pos == n_cdts_buffers - 1)
         tens_flags |= EnumTensorFlag_TENSOR_FLAG_LAST;
@@ -1128,9 +1134,17 @@ void aiPbCmdNNInfo(const reqMsg *req, respMsg *resp, void *param)
     PB_LC_STAT("config", "version", "1.0");
     PB_LC_STAT("config", "dev_id", "0x%X", conf.devid);
     PB_LC_STAT("config", "mcu_freq", "%d", conf.sclk);
+#ifdef STM32H7P
+    PB_LC_STAT("config", "axi_freq", "%d", conf.hclk);
+#else
     PB_LC_STAT("config", "noc_freq", "%d", conf.hclk);
+#endif
     PB_LC_STAT("config", "npu_freq", "%d", conf.extra[1]);
+#ifdef STM32H7P
+    PB_LC_STAT("config", "ahb_freq", "%d", conf.extra[2]);
+#else
     PB_LC_STAT("config", "nic_freq", "%d", conf.extra[2]);
+#endif
 #ifdef USE_NPU_CACHE
     PB_LC_STAT("config", "npu_cache", "1");
 #else
@@ -1385,6 +1399,9 @@ int aiValidationProcess(void)
       EnumVersion_P_VERSION_MINOR);
 
   aiPbMgrInit(pbCmdFuncTab);
+
+  /* used only by Stellar MCUs, empty for all other MCUs */
+  port_io_init();
 
   do {
     r = aiPbMgrWaitAndProcess();

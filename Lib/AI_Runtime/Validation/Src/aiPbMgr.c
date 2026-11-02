@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiPbMgr.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Helper function for AI ProtoBuffer support
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2021 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -162,16 +162,18 @@ void aiPbStrCopy(const char *src, char *dst, uint32_t max)
   const char undef[] = "UNDEFINED";
   size_t l = strlen(src);
 
-  if (l > max)
-    l = max-1;
+  if (l >= max)
+    l = max - 1;
 
   if (!dst)
     return;
 
-  if (src && l)
-    memcpy(dst, src, l+1);
+  if (src && l) {
+    memcpy(dst, src, l); // copy characters from string
+    dst[l] = 0; // ensure to have NULL-terminator
+  }
   else
-    memcpy(dst, undef, strlen(undef)+1);
+    memcpy(dst, undef, strlen(undef) + 1);
 }
 
 /*
@@ -335,14 +337,11 @@ bool aiPbMgrSendLogV2(EnumState state, uint32_t lvl, const char *str)
   if (pbContextMgr.state != PB_MGR_ON_GOING)
     return false;
 
-  size_t len = strlen(str);
-
   pbContextMgr.resp.which_payload = respMsg_log_tag;
   pbContextMgr.resp.payload.log.level = lvl;
-  if (len >= sizeof(pbContextMgr.resp.payload.log.str))
-    len = sizeof(pbContextMgr.resp.payload.log.str) - 1;
 
-  memcpy(&pbContextMgr.resp.payload.log.str[0], str, len+1);
+  aiPbStrCopy(str, &pbContextMgr.resp.payload.log.str[0],
+      (uint32_t)sizeof(pbContextMgr.resp.payload.log.str));
 
   aiPbMgrSendResp(&(pbContextMgr.req), &(pbContextMgr.resp), state);
 
@@ -500,7 +499,8 @@ void aiPbCmdSync(const reqMsg *req, respMsg *resp, void *param)
 
 static bool _test_mode_is_enabled = false;
 
-bool aiPbTestModeEnabled() {
+
+bool aiPbTestModeEnabled(void) {
   return _test_mode_is_enabled;
 }
 

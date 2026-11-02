@@ -1,12 +1,12 @@
 /**
   ******************************************************************************
   * @file    layers_nl.h
-  * @author  AST Embedded Analytics Research Platform
+  * @author  STMicroelectronics
   * @brief   header file of AI platform nonlinearity layers datatypes
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2018 STMicroelectronics.
+  * Copyright (c) 2018 - 2026 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -134,6 +134,18 @@ void nl_func_tanh_array_f32(ai_tensor *out, const ai_tensor *in,
                             const ai_size size, const ai_handle params);
 
 /*!
+ * @brief Computes the tanh function on a float data array
+ * @ingroup layers_nl
+ * @param in opaque handler to float, size should be 1
+ * @param out opaque handler to float output elem
+ * @param size number of elements in the input buffer
+ * @param params opaque handler to optional nl parameters
+ */
+AI_INTERNAL_API
+void nl_func_tanh_array_f16(ai_tensor *out, const ai_tensor *in,
+                            const ai_size size, const ai_handle params);
+
+/*!
  * @brief Computes the tanh function on a fixed point data array
  * @ingroup layers_nl
  * @param in opaque handler to input elements to process
@@ -156,6 +168,30 @@ void nl_func_tanh_array_fixed(ai_tensor *out, const ai_tensor *in,
  */
 AI_INTERNAL_API
 void nl_func_sigmoid_array_f32(ai_tensor *out, const ai_tensor *in,
+                               const ai_size size, const ai_handle params);
+
+/*!
+ * @brief Computes the sigmoid function on a float data array
+ * @ingroup layers_nl
+ * @param in opaque handler to float, size should be 1
+ * @param out opaque handler to float output elem
+ * @param size number of elements in the input buffer
+ * @param params opaque handler to optional nl parameters
+ */
+AI_INTERNAL_API
+void nl_func_hard_sigmoid_array_f16(ai_tensor *out, const ai_tensor *in,
+                               const ai_size size, const ai_handle params);
+
+/*!
+ * @brief Computes the sigmoid function on a float16 data array
+ * @ingroup layers_nl
+ * @param in opaque handler to float16, size should be 1
+ * @param out opaque handler to float16 output elem
+ * @param size number of elements in the input buffer
+ * @param params opaque handler to optional nl parameters
+ */
+AI_INTERNAL_API
+void nl_func_sigmoid_array_f16(ai_tensor *out, const ai_tensor *in,
                                const ai_size size, const ai_handle params);
 
 /*!
@@ -565,6 +601,18 @@ void nl_func_clip_array_f32(ai_tensor *out, const ai_tensor *in,
                              const ai_size size, const ai_handle params);
 
 /*!
+ * @brief Computes the clip function on a float data array
+ * @ingroup layers_nl
+ * @param in opaque handler to float, size should be 1
+ * @param out opaque handler to float output elem
+ * @param size number of elements in the input buffer
+ * @param params opaque handler to optional nl parameters
+ */
+AI_INTERNAL_API
+void nl_func_clip_array_f16(ai_tensor *out, const ai_tensor *in,
+                             const ai_size size, const ai_handle params);
+
+/*!
  * @brief Computes the hardmax function on a float data array
  * @ingroup layers_nl
  * @param in opaque handler to float, size should be 1
@@ -574,6 +622,18 @@ void nl_func_clip_array_f32(ai_tensor *out, const ai_tensor *in,
 AI_INTERNAL_API
 void nl_func_hardmax_array_f32(ai_tensor *out, const ai_tensor *in,
                              const ai_shape *shape, const ai_handle params);
+
+/*!
+ * @brief Computes the generic relu function on a float data array
+ * @ingroup layers_nl
+ * @param in opaque handler to float, size should be 1
+ * @param out opaque handler to float output elem
+ * @param size number of elements in the input buffer
+ * @param params opaque handler to optional nl parameters
+ */
+AI_INTERNAL_API
+void nl_func_relu_generic_array_f16(ai_tensor *out, const ai_tensor *in,
+                                    const ai_size size, const ai_handle params);
 
 /*!
  * @brief Computes the generic relu function on a float data array
@@ -609,6 +669,18 @@ void nl_func_relu_thresholded_array_f32(ai_tensor *out, const ai_tensor *in,
  */
 AI_INTERNAL_API
 void nl_func_relu_array_f32(ai_tensor *out, const ai_tensor *in,
+                            const ai_size size, const ai_handle params);
+
+/*!
+ * @brief Computes the relu function on a float16 data array
+ * @ingroup layers_nl
+ * @param in opaque handler to float16, size should be 1
+ * @param out opaque handler to float16 output elem
+ * @param size number of elements in the input buffer
+ * @param params opaque handler to optional nl parameters
+ */
+AI_INTERNAL_API
+void nl_func_relu_array_f16(ai_tensor *out, const ai_tensor *in,
                             const ai_size size, const ai_handle params);
 
 /*!
@@ -666,6 +738,18 @@ void nl_func_array_integer(ai_tensor *out, const ai_tensor *in,
  */
 AI_INTERNAL_API
 void nl_func_elu_array_f32(ai_tensor *out, const ai_tensor *in,
+                           const ai_size size, const ai_handle params);
+
+/*!
+ * @brief Computes the elu function on a float16 data array
+ * @ingroup layers_nl
+ * @param in opaque handler to float16, size should be 1
+ * @param out opaque handler to float16 output elem
+ * @param size number of elements in the input buffer
+ * @param params opaque handler to optional nl parameters
+ */
+AI_INTERNAL_API
+void nl_func_elu_array_f16(ai_tensor *out, const ai_tensor *in,
                            const ai_size size, const ai_handle params);
 
 /*!

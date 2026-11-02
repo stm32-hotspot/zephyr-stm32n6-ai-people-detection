@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    aiValidation_ST_AI.c
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   AI Validation application (ST AI embedded c-api)
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2023 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -22,6 +22,7 @@
  * History:
  *  - v1.0 - Initial version (ST AI embedded c-api)
  *  - v1.1 - Remove old AI type (macros & specific type)
+ *  - v1.2 - Fix to support multiple models.
  *
  */
 
@@ -84,11 +85,17 @@
 #define _APP_DEBUG_                     0
 
 #define _APP_VERSION_MAJOR_     (0x01)
-#define _APP_VERSION_MINOR_     (0x01)
+#define _APP_VERSION_MINOR_     (0x02)
 #define _APP_VERSION_           ((_APP_VERSION_MAJOR_ << 8) | _APP_VERSION_MINOR_)
 
 #define _APP_NAME_   "AI Validation (ST.AI c-api)"
 
+
+#define _IN_OUT_MAX_NUMBER (32)
+
+#if (STAI_MNETWORK_IN_NUM > _IN_OUT_MAX_NUMBER) || (STAI_MNETWORK_OUT_NUM > _IN_OUT_MAX_NUMBER)
+#error Number of IO exceeds the supported number (max. 32).
+#endif
 
 struct ai_network_exec_ctx {
   stai_ptr handle;
@@ -98,6 +105,10 @@ struct ai_network_exec_ctx {
   tensor_descs acts;
   tensor_descs states;
   tensor_descs params;
+
+  /* Handle the physical address of the IO buffers */
+  stai_ptr   in_addr[_IN_OUT_MAX_NUMBER];
+  stai_ptr   out_addr[_IN_OUT_MAX_NUMBER];
 
   bool debug;
 
@@ -258,9 +269,6 @@ static uint32_t _stai_compiler_id_to(stai_compiler_id id)
   }
   else if  (id == STAI_COMPILER_ID_HIGHTECH) {
     return EnumTools_AI_HTC;
-  }
-  else if  (id == STAI_COMPILER_ID_GCC) {
-    return EnumTools_AI_GCC;
   }
   else if  (id == STAI_COMPILER_ID_IAR) {
     return EnumTools_AI_IAR;
@@ -453,11 +461,14 @@ static bool _send_ai_io_tensor(const reqMsg *req, respMsg *resp,
 
 #if defined(HAS_DEDICATED_PRINT_PORT) && HAS_DEDICATED_PRINT_PORT == 1
 #define PB_LC_PRINT(debug, fmt, ...) LC_PRINT(fmt, ##__VA_ARGS__)
+#define PB_LC_STAT(_cat, _sub_cat, fmt, ...) LC_PRINT("s:" _cat ":" _sub_cat ":" fmt, ##__VA_ARGS__)
 #else
 
-#define _PRINT_BUFFER_SIZE  80
+#define _PRINT_BUFFER_SIZE  256
 
 static char _print_buffer[_PRINT_BUFFER_SIZE];
+
+void _print_debug(bool debug, const char* fmt, ...);
 
 void _print_debug(bool debug, const char* fmt, ...)
 {
@@ -468,17 +479,19 @@ void _print_debug(bool debug, const char* fmt, ...)
     return;
 
   va_start(ap, fmt);
-  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE, fmt, ap);
+  s = LC_VSNPRINT(_print_buffer, _PRINT_BUFFER_SIZE - 1, fmt, ap);
   va_end(ap);
   while (s) {
     if ((_print_buffer[s] == '\n') || (_print_buffer[s] == '\r'))
       _print_buffer[s] = 0;
     s--;
   }
+  _print_buffer[_PRINT_BUFFER_SIZE - 1] = 0;
   aiPbMgrSendLogV2(EnumState_S_WAITING, 1, &_print_buffer[0]);
 }
 
 #define PB_LC_PRINT(debug, fmt, ...) _print_debug(debug, fmt, ##__VA_ARGS__)
+#define PB_LC_STAT(_cat, _sub_cat, fmt, ...) _print_debug(true, "s:" _cat ":" _sub_cat ":" fmt "\r\n", ##__VA_ARGS__)
 #endif
 
 
@@ -491,7 +504,7 @@ void _print_debug(bool debug, const char* fmt, ...)
 
 #include "stai_events.h"
 
-void _stai_event_cb(void* cb_cookie, const stai_event_type event_type,
+static void _stai_event_cb(void* cb_cookie, const stai_event_type event_type,
     const void* event_payload)
 {
   volatile uint64_t ts = cyclesCounterEnd(); /* time stamp to mark the entry */
@@ -530,6 +543,8 @@ void _stai_event_cb(void* cb_cookie, const stai_event_type event_type,
         uint64ToDecimal(ts),
         (int)input_details->size,
         (int)output_details->size);
+
+    PB_LC_STAT("node", "end", "%d:%s:%ld", ctx->c_idx, "??", ts);
 
     if (evt->node_id != details->nodes[ctx->c_idx].id) {
       PB_LC_PRINT(ctx->debug, "RUN:CB ERROR -- Mismatch between event id and id - %ld vs %ld", evt->node_id,
@@ -577,7 +592,7 @@ void _stai_event_cb(void* cb_cookie, const stai_event_type event_type,
   cyclesCounterStart();
 }
 
-uint64_t adjustInferenceTime(struct ai_network_exec_ctx *ctx, uint64_t tend)
+static uint64_t adjustInferenceTime(struct ai_network_exec_ctx *ctx, uint64_t tend)
 {
   if (ctx->observer_is_enabled) {
     PB_LC_PRINT(ctx->debug, "RUN:adjust cycles %s + %s",
@@ -693,21 +708,29 @@ static int aiBootstrap(struct ai_network_exec_ctx *ctx, const char *nn_name)
   /* Set IO -------------------------------------------------------- */
   LC_PRINT(" Set IO buffers..\r\n");
   if (ctx->report.flags & STAI_FLAG_INPUTS)
-    stai_err = stai_mnetwork_get_inputs(ctx->handle, data_ins);
-  else
-    stai_err = stai_mnetwork_set_inputs(ctx->handle, data_ins);
+    stai_err = stai_mnetwork_get_inputs(ctx->handle, &ctx->in_addr[0]);
+  else {
+    for (int i=0; i< ctx->report.n_inputs; i++) {
+      ctx->in_addr[i] = data_ins[i];
+    }
+    stai_err = stai_mnetwork_set_inputs(ctx->handle, &ctx->in_addr[0]);
+  }
   if (stai_err != STAI_SUCCESS) {
     stai_log_err(stai_err, "stai_mnetwork_set/get_inputs");
     stai_mnetwork_deinit(ctx->handle);
     ctx->handle = NULL;
   }
   ctx->inputs.n_tensor = ctx->report.n_inputs;
-  ctx->inputs.address = (uintptr_t *)data_ins;
+  ctx->inputs.address = (uintptr_t *)&ctx->in_addr[0];
 
   if (ctx->report.flags & STAI_FLAG_OUTPUTS)
-    stai_err = stai_mnetwork_get_outputs(ctx->handle, data_outs);
-  else
-    stai_err = stai_mnetwork_set_outputs(ctx->handle, data_outs);
+    stai_err = stai_mnetwork_get_outputs(ctx->handle, &ctx->out_addr[0]);
+  else {
+    for (int i=0; i< ctx->report.n_outputs; i++) {
+      ctx->out_addr[i] = data_outs[i];
+    }
+    stai_err = stai_mnetwork_set_outputs(ctx->handle, &ctx->out_addr[0]);
+  }
 
   if (stai_err != STAI_SUCCESS) {
     stai_log_err(stai_err, "stai_mnetwork_set/get_outputs");
@@ -715,7 +738,7 @@ static int aiBootstrap(struct ai_network_exec_ctx *ctx, const char *nn_name)
     ctx->handle = NULL;
   }
   ctx->outputs.n_tensor = ctx->report.n_outputs;
-  ctx->outputs.address = (uintptr_t *)data_outs;
+  ctx->outputs.address = (uintptr_t *)&ctx->out_addr[0];
 
   /* Display the network info -------------------------------------- */
   stai_log_network_info(&ctx->report,
@@ -780,7 +803,7 @@ static void aiDeInit(void)
  * -----------------------------------------------------------------------------
  */
 
-void aiPbCmdSysInfo(const reqMsg *req, respMsg *resp, void *param)
+static void aiPbCmdSysInfo(const reqMsg *req, respMsg *resp, void *param)
 {
   UNUSED(param);
   struct mcu_conf conf;
@@ -812,7 +835,7 @@ void aiPbCmdSysInfo(const reqMsg *req, respMsg *resp, void *param)
   aiPbMgrSendResp(req, resp, EnumState_S_IDLE);
 }
 
-void aiPbCmdNNInfo(const reqMsg *req, respMsg *resp, void *param)
+static void aiPbCmdNNInfo(const reqMsg *req, respMsg *resp, void *param)
 {
   struct ai_network_exec_ctx *ctx;
 
@@ -861,7 +884,7 @@ static void _reset_states(const reqMsg *req, struct ai_network_exec_ctx *ctx)
   }
 }
 
-void aiPbCmdNNRun(const reqMsg *req, respMsg *resp, void *param)
+static void aiPbCmdNNRun(const reqMsg *req, respMsg *resp, void *param)
 {
   stai_return_code stai_err;
   uint64_t tend;

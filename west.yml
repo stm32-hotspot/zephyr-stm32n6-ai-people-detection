@@ -11,7 +11,7 @@ manifest:
   projects:
     - name: zephyr
       url: https://github.com/zephyrproject-rtos/zephyr.git
-      revision: v4.3.0
+      revision: v4.5.0
       west-commands: scripts/west-commands.yml
       import:
         name-allowlist:
@@ -21,9 +21,10 @@ manifest:
           - lvgl
           - mcuboot
           - mbedtls
+          - tf-psa-crypto
 
     - name: zephyr-stm32-mw-isp
       url: https://github.com/stm32-hotspot/zephyr-stm32-mw-isp.git
-      revision: v0.3.0
+      revision: v0.4.0
       path: st/lib/zephyr-stm32-mw-isp
       submodules: true

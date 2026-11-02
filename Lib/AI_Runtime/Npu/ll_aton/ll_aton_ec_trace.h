@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ll_aton_ec_trace.h
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Header file for defining epoch controller trace methods
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2023-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -28,7 +28,7 @@ extern "C"
 #include <stdint.h>
 
   // MCU+NPU cache line size (power of 2 not less than 8)
-  extern unsigned int cache_line_size;
+  extern unsigned int ec_trace_cache_line_size;
 
   typedef struct mpool_reloc_info_t
   {
@@ -40,14 +40,15 @@ extern "C"
   } mpool_reloc_info_t;
 
   // array of memory pool info needed for relocation (ends when name == NULL)
-  extern mpool_reloc_info_t mpool_reloc_info[];
+  extern mpool_reloc_info_t ec_trace_mpool_reloc_info[];
 
-  extern uintptr_t get_ec_aton_base(void);
-  extern void initialize_ec_aton_base(void);
+  extern uintptr_t ec_trace_get_aton_base(void);
+  extern void ec_trace_initialize_aton_base(void);
 
   extern void ec_trace_comment(const char *comment);
 
-  extern void ec_trace_init(const char *out_filename, const char *network_name, bool encrypted);
+  extern void ec_trace_init(const char *out_filename, const char *network_name, bool encrypted, int debug_level,
+                            unsigned int optimize_blobs);
   extern void ec_trace_start_blob(const char *blob_name);
   extern void ec_trace_end_blob(const char *blob_name);
   extern void ec_trace_start_epoch(unsigned int num);

@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ai_atonn_wrapper.h
- * @author  GPM/AIS Application Team
+ * @author  STMicroelectronics
  * @brief   AI ATONN wrapper - helper functions
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2023, 2024 STMicroelectronics.
+ * Copyright (c) 2023 - 2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file

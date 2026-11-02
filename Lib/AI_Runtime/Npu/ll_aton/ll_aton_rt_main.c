@@ -1,17 +1,18 @@
 /**
  ******************************************************************************
  * @file    ll_aton_rt_main.c
- * @author  SRA Artificial Intelligence & Embedded Architectures
+ * @author  STMicroelectronics
  * @brief   Template `main()` function (named `LL_ATON_RT_Main()`) for
  *          Cube.AI/ATON integration in a RTOS-less application.
- * @note    This file is intended to be just a template and is limited to run the
- *          ATON LL runtime with a single network instance for a single inference!
+ * @note    This file is intended to be just a TEMPLATE and is limited to run the
+ *          ATON LL runtime with a single network instance for a single inference
+ *          in asynchronous or polling runtime execution mode ONLY!!!
  *          Please, generate your own embodiment of this file and customize it
  *          so to fit the needs of your application.
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2024 STMicroelectronics.
+ * Copyright (c) 2021-2026 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -23,10 +24,13 @@
 
 #include "ll_aton_rt_user_api.h"
 
+#if (LL_ATON_RT_MODE != LL_ATON_RT_IRQ_SCHED)
+
 /*** Main Template ***/
 
 /**
- * @brief Template for synchronously executing a single inference of a single network instance (e.g. regression tests)
+ * @brief Template for synchronously executing a single inference of a single network instance one time
+ *        in asynchronous or polling mode (e.g. regression tests)
  * @param network_instance pointer to the network instance representing the network and execution instance to execute.
  *                         The instance object MUST have already set a valid link to a network interface.
  *                         The user may declare/instantiate such an object by using either macro
@@ -34,6 +38,7 @@
  *                         and the network interface, or macros
  *                         `LL_ATON_DECLARE_NAMED_NN_INTERFACE()` & `LL_ATON_DECLARE_NAMED_NN_INSTANCE()` to
  *                         create/instantiate the objects separately.
+ * @note this function does NOT make part of the ATON Runtime User API
  */
 void LL_ATON_RT_Main(NN_Instance_TypeDef *network_instance)
 {
@@ -71,3 +76,5 @@ void LL_ATON_RT_Main(NN_Instance_TypeDef *network_instance)
 
   /*** End of user de-initialization code ***/
 }
+
+#endif // (LL_ATON_RT_MODE != LL_ATON_RT_IRQ_SCHED)

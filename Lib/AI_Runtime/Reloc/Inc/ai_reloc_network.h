@@ -1,12 +1,12 @@
 /**
  ******************************************************************************
  * @file    ai_reloc_network.h
- * @author  MCD/AIS Team
+ * @author  STMicroelectronics
  * @brief   Relocatable  network support
  ******************************************************************************
  * @attention
  *
- * <h2><center>&copy; Copyright (c) 2019,2021 STMicroelectronics.
+ * <h2><center>&copy; Copyright (c) 2019 - 2026 STMicroelectronics.
  * All rights reserved.</center></h2>
  *
  * This software is licensed under terms that can be found in the LICENSE file in
@@ -71,6 +71,7 @@
 #define AI_RELOC_ARM_CORTEX_M7   (0xC27UL)
 #define AI_RELOC_ARM_CORTEX_M33  (0xD21UL)
 #define AI_RELOC_ARM_CORTEX_M55  (0xD22UL)
+#define AI_RELOC_ARM_CORTEX_M85  (0xD23UL)
 
 /* Tool-chain definition (ONLY this tool-chain is currently supported)*/
 #define AI_RELOC_TOOLCHAIN_ARM_EMBEDDED    (0x8UL)
